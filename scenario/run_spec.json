@@ -7,7 +7,7 @@
     "alex_rivera",
     "maya_chen"
   ],
-  "budget_cents": 200,
+  "budget_cents": 5000,
   "policy_ref": "pomerium://pitchloop/demo-v1",
   "required_claims": [
     "fact_a",

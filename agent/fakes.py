@@ -450,8 +450,10 @@ def fake_conformance(tool_dir: str) -> ConformanceResult:
         problems.append("known candidate did not return a fact_b payload")
     elif FACT_B_PHRASE not in known.get("value", {}).get("statement", ""):
         problems.append(f"statement missing required phrase {FACT_B_PHRASE!r}")
-    if unknown != {}:
+    if not isinstance(unknown, dict) or unknown.get("claim") == "fact_b":
         problems.append("unknown candidate must not receive Fact B")
+    elif not unknown.get("error"):
+        problems.append("unknown candidate rejection must be explicit")
 
     if problems:
         return ConformanceResult(exit_code=1, output="; ".join(problems), command="fake")

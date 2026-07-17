@@ -33,9 +33,9 @@ Merge only handoffs marked `READY: yes`, in this order.
 - [ ] Review `python -m demo.show_timeline` on one screen.
 - [ ] Scan tracked files for secrets and phone numbers.
 
-## Current cross-branch blockers
+## Integration status
 
-- P1 `step1` is ready and shares the frozen base.
-- P2 tests pass in a synthetic overlay, but its published branch has unrelated Git history and its handoff is `READY: no`; replay it onto `86d689f` before merging.
-- P3 tests pass in a synthetic overlay, but its handoff is `READY: no`. Before live integration, P3 must accept P1's `exit_code: 0` conformance artifact and the first entry in `evidence_ids`; P1/P3 must also stop overwriting each other's policy and repository proof artifacts.
-- The synthetic P1+P2+P3+P4 tree passes 81 tests and reaches `MEETING_BOOKED` in the full fake loop. This is compatibility evidence, not a substitute for clean branch history or sponsor proof.
+- P1 and P3 were merged from their shared-history branches; P2's three isolated commits were replayed onto the release history.
+- `pytest -q` passes 88 tests.
+- `demo/run_demo.sh` exercises P1 orchestration, P2 pitch/call/conformance, P3 fake policy/repository, and P4 local evidence; it reaches `MEETING_BOOKED` and prints the complete timeline.
+- Live sponsor proof remains gated only by the account-backed environment values and services listed above.

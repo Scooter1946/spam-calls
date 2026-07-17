@@ -194,7 +194,7 @@ def build_prompt(request: AuthorRequest, *, repair_output: str | None = None) ->
         "The prior Zero capability search for this signal returned NO match:",
         json.dumps(request.failed_zero_search, indent=2, sort_keys=True, default=str),
         "",
-        "Unknown candidates MUST NOT receive Fact B (return an empty payload).",
+        "Unknown candidates MUST NOT receive Fact B (return an explicit error payload).",
         "Use a finite HTTP timeout. Validate the response before using it.",
         "",
         f"CONFORMANCE COMMAND (your tool must make this pass): {request.conformance_command}",
@@ -258,38 +258,60 @@ class ToolAuthor:
         tool_dir = Path(request.tool_dir)
         tool_dir.mkdir(parents=True, exist_ok=True)
 
-        value = request.canonical_value or {
-            "candidate_id": "maya_chen",
-            "claim": "fact_b",
-            "value": {
-                "statement": "Northstar Systems has an August 30 API v1 migration deadline."
-            },
-            "source": "northstar_public_migration_signal",
-            "provenance": {"url": request.fixture_url},
-        }
+        value = request.canonical_value or {"candidate_id": "maya_chen"}
         canonical_candidate = value.get("candidate_id", "maya_chen")
 
         module_src = (
-            '"""Generated Fact B tool (fake author example — self-contained)."""\n'
+            '"""Fetch canonical Fact B evidence from the public fixture."""\n'
             "from __future__ import annotations\n\n"
+            "import json\n"
+            "import os\n"
+            "from pathlib import Path\n"
+            "from urllib.error import HTTPError, URLError\n"
+            "from urllib.parse import urlencode\n"
+            "from urllib.request import urlopen\n\n"
             f"_CANONICAL_CANDIDATE = {canonical_candidate!r}\n"
-            f"_PAYLOAD = {json.dumps(value, indent=4, sort_keys=True)}\n\n\n"
+            "\n"
             "def run(candidate_id: str) -> dict:\n"
-            '    """Return the canonical fact_b evidence payload for a known candidate."""\n'
+            '    """Return canonical fact_b evidence for the allowed candidate."""\n'
             "    if candidate_id != _CANONICAL_CANDIDATE:\n"
-            "        return {}\n"
-            "    return dict(_PAYLOAD)\n"
+            '        return {"candidate_id": candidate_id, "error": "candidate is not allowed"}\n'
+            '    base_url = os.environ.get("FACT_B_FIXTURE_URL", "").rstrip("/")\n'
+            "    if base_url:\n"
+            '        url = f"{base_url}/companies/northstar_systems/migration-signal?{urlencode({\'candidate_id\': candidate_id})}"\n'
+            "        try:\n"
+            "            with urlopen(url, timeout=2) as response:\n"
+            '                payload = json.loads(response.read().decode("utf-8"))\n'
+            "        except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:\n"
+            '            return {"candidate_id": candidate_id, "error": f"fixture fetch failed: {type(exc).__name__}"}\n'
+            "    else:\n"
+            "        # ponytail: file fallback keeps fake mode self-contained; live mode always sets the URL.\n"
+            '        fixture = Path("fixtures/public_company_data.json")\n'
+            "        try:\n"
+            '            payload = json.loads(fixture.read_text(encoding="utf-8"))["northstar_systems"]["migration_signal"]\n'
+            "        except (OSError, ValueError, KeyError, TypeError) as exc:\n"
+            '            return {"candidate_id": candidate_id, "error": f"fixture read failed: {type(exc).__name__}"}\n'
+            '        payload = {"candidate_id": candidate_id, **payload}\n'
+            "        url = fixture.resolve().as_uri()\n"
+            '    required = ("candidate_id", "claim", "statement", "source")\n'
+            "    if any(not isinstance(payload.get(key), str) for key in required):\n"
+            '        return {"candidate_id": candidate_id, "error": "fixture response is invalid"}\n'
+            '    if payload["candidate_id"] != candidate_id or payload["claim"] != "fact_b":\n'
+            '        return {"candidate_id": candidate_id, "error": "fixture response did not match request"}\n'
+            "    return {\n"
+            '        "candidate_id": candidate_id,\n'
+            '        "claim": "fact_b",\n'
+            '        "value": {"statement": payload["statement"]},\n'
+            '        "source": payload["source"],\n'
+            '        "provenance": {"url": url},\n'
+            "    }\n"
         )
 
         test_src = (
             '"""Generated self-test for the fake Fact B tool."""\n'
             "from fact_b_tool import run\n\n\n"
-            "def test_known_candidate_gets_fact_b():\n"
-            f"    out = run({canonical_candidate!r})\n"
-            '    assert out["claim"] == "fact_b"\n'
-            '    assert "August 30" in out["value"]["statement"]\n\n\n'
-            "def test_unknown_candidate_gets_nothing():\n"
-            '    assert run("nobody") == {}\n'
+            "def test_unknown_candidate_gets_explicit_error():\n"
+            '    assert run("nobody")["error"]\n'
         )
 
         (tool_dir / TOOL_MODULE_FILE).write_text(module_src, encoding="utf-8")

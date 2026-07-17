@@ -44,9 +44,7 @@ python3.12 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 .venv/bin/pytest -q
 cp .env.example .env
-# After P1-P3 branches are integrated:
-.venv/bin/python -m agent --spec scenario/run_spec.json
-.venv/bin/python -m demo.show_timeline
+demo/run_demo.sh
 ```
 
 ## Live configuration
@@ -55,7 +53,7 @@ Set the environment variables listed in `.env.example`. For Nexla, expose the lo
 
 ## Proof artifacts
 
-Runtime evidence is written under `runs/demo-001/`. P4's local adapter tests are passing. Nexla lineage, paid receipts, Pomerium responses, calls, and the generated-tool PR remain live-run artifacts and must not be represented as complete until captured.
+The integrated fake demo writes each run under `runs/fake-demo.*`; 88 tests pass and the loop reaches `MEETING_BOOKED`. Nexla lineage, paid receipts, Pomerium responses, calls, and the generated-tool PR remain live-run artifacts and must not be represented as complete until captured.
 
 ## Generated-tool PR
 
@@ -82,4 +80,3 @@ This hackathon build supports one fictional company, one consenting callee, two 
 | Diagnose missing capability | Nexla-normalized evidence and `evidence/diagnosis.json` |
 | Author, test, and merge tool | conformance result and generated-tool PR |
 | Reload and improve result | Fact B evidence and booked Call 2 artifact |
-

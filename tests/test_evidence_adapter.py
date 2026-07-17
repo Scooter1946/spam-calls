@@ -7,8 +7,11 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from contracts.models import Evidence
+from contracts.models import Evidence, RunSpec
 from demo.show_timeline import timeline
+from agent import fakes
+from agent.__main__ import build_config, build_live_deps
+from agent.artifacts import Artifacts
 from evidence.sink import create_app
 from evidence.store import EvidenceStore
 from integrations.evidence_client import (
@@ -138,6 +141,15 @@ def test_store_deduplicates_persists_and_filters(tmp_path):
     changed = earlier.model_copy(update={"value": {"statement": "changed"}})
     with pytest.raises(ValueError, match="conflicting evidence_id"):
         store.append(changed)
+
+
+def test_default_store_uses_exact_configured_run_dir(tmp_path, monkeypatch):
+    run_dir = tmp_path / "named-run"
+    monkeypatch.setenv("PITCHLOOP_RUN_DIR", str(run_dir))
+    store = EvidenceStore()
+    store.append(normalize_raw("zero.paid_result", zero_event(), "corr-exact"))
+    assert (run_dir / "evidence/normalized.jsonl").is_file()
+    assert not (tmp_path / "demo-001/evidence/normalized.jsonl").exists()
 
 
 def test_sink_validates_correlation_and_handles_replays(tmp_path):
@@ -332,3 +344,23 @@ def test_timeline_does_not_claim_failed_artifacts(tmp_path):
         json.dumps({"no_match": False, "matches": [{"id": "found"}]})
     )
     assert timeline(tmp_path) == []
+
+
+def test_integrated_factory_honors_fake_zero_mode(tmp_path, monkeypatch):
+    monkeypatch.setenv("ZERO_MODE", "fake")
+    monkeypatch.setenv("POLICY_MODE", "fake")
+    monkeypatch.setenv("CALL_MODE", "fake")
+    monkeypatch.setenv("REPO_MODE", "fake")
+    monkeypatch.setenv("EVIDENCE_MODE", "local")
+    spec = RunSpec(
+        run_id="demo-001",
+        goal="book_one_qualified_meeting",
+        product="MigrationGuard",
+        persona="maya_chen",
+        candidates=["alex_rivera", "maya_chen"],
+        budget_cents=5000,
+        policy_ref="demo",
+        required_claims=["fact_a", "fact_b"],
+    )
+    deps = build_live_deps(spec, build_config(), Artifacts(tmp_path), "fake")
+    assert isinstance(deps.zero, fakes.FakeZeroPort)

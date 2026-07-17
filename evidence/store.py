@@ -14,6 +14,7 @@ from evidence.redact import redact
 class EvidenceStore:
     def __init__(self, runs_root: str | Path | None = None) -> None:
         run_dir = Path(os.getenv("PITCHLOOP_RUN_DIR", "runs/demo-001"))
+        self.run_dir = run_dir if runs_root is None else None
         self.runs_root = Path(runs_root) if runs_root else run_dir.parent
         self._lock = Lock()
         self._records: dict[str, Evidence] = {}
@@ -21,7 +22,14 @@ class EvidenceStore:
         self._load()
 
     def _load(self) -> None:
-        for path in self.runs_root.glob("*/evidence/normalized.jsonl"):
+        paths = (
+            [self.run_dir / "evidence" / "normalized.jsonl"]
+            if self.run_dir
+            else self.runs_root.glob("*/evidence/normalized.jsonl")
+        )
+        for path in paths:
+            if not path.exists():
+                continue
             for line in path.read_text().splitlines():
                 if line.strip():
                     self._remember(Evidence.model_validate_json(line))
@@ -41,7 +49,8 @@ class EvidenceStore:
                     raise ValueError(f"conflicting evidence_id: {evidence.evidence_id}")
                 return existing, False
 
-            path = self.runs_root / evidence.run_id / "evidence" / "normalized.jsonl"
+            run_dir = self.run_dir or self.runs_root / evidence.run_id
+            path = run_dir / "evidence" / "normalized.jsonl"
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(evidence.model_dump(mode="json"), sort_keys=True))

@@ -109,8 +109,19 @@ def build_live_deps(spec: RunSpec, config: Config, artifacts: Artifacts, author_
             + "\nRun with all *_MODE=fake to exercise the P1 loop standalone."
         )
 
+    if os.environ.get("ZERO_MODE", "fake") == "fake":
+        from agent.fakes import FakeZeroPort
+
+        zero = FakeZeroPort(
+            config.fact_a_capability,
+            config.fact_b_capability,
+            artifacts=artifacts,
+        )
+    else:
+        zero = ZeroClient(artifacts=artifacts)
+
     return Deps(
-        zero=ZeroClient(artifacts=artifacts),
+        zero=zero,
         policy=build_policy_port(artifacts=artifacts),
         evidence=build_evidence_port(artifacts=artifacts),
         repo=build_repo_port(artifacts=artifacts),

@@ -262,7 +262,7 @@ def test_budget_ledger_tracks_from_receipts():
 # --------------------------------------------------------------------------- #
 
 
-def test_registry_finds_capability_only_after_files_present(tmp_path):
+def test_registry_finds_capability_only_after_files_present(tmp_path, monkeypatch):
     staging = tmp_path / "staging"
     target = tmp_path / "tools"
     target.mkdir()
@@ -294,9 +294,28 @@ def test_registry_finds_capability_only_after_files_present(tmp_path):
     registry.reload()
     handle = registry.find("fact_b")
     assert handle is not None
+    response_payload = {
+        "candidate_id": "maya_chen",
+        "claim": "fact_b",
+        "statement": "Northstar Systems has an August 30 API v1 migration deadline.",
+        "source": "northstar_public_migration_signal",
+    }
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return json.dumps(response_payload).encode()
+
+    monkeypatch.setenv("FACT_B_FIXTURE_URL", "http://fixture.test")
+    handle.run.__globals__["urlopen"] = lambda *_args, **_kwargs: Response()
     out = handle.run("maya_chen")  # callable handle
     assert "August 30" in out["value"]["statement"]
-    assert handle("nobody") == {}  # __call__ also works; unknown gets nothing
+    assert handle("nobody")["error"]  # __call__ also works; unknown gets no fact
 
 
 def test_registry_invalid_manifest_becomes_failure(tmp_path):
