@@ -192,3 +192,52 @@ class ZeroClient:
     def _preserve_raw(self, relative_path: str, value: Any) -> str:
         path = self.artifacts.write_json(relative_path, value)
         return str(path)
+
+
+# --------------------------------------------------------------------------- #
+# Live sponsor-proof capture + validation (no fabrication)
+# --------------------------------------------------------------------------- #
+
+#: Zero-owned artifacts that must exist for a run to count as a live Zero proof.
+REQUIRED_LIVE_ZERO_ARTIFACTS: tuple[str, ...] = (
+    "zero/cli_install_proof.txt",
+    "zero/wallet_claim_proof.json",
+    "zero/opening_balance.json",
+    "zero/search_fact_a.json",
+    "zero/fact_a_result.json",
+    "zero/fact_a_receipt.json",
+    "zero/closing_balance.json",
+)
+
+
+def validate_live_proof(run_dir: str | Path) -> list[str]:
+    """Return the list of required live-Zero artifacts that are still missing.
+
+    An empty list means the run directory contains a complete live Zero proof.
+    This lets the team verify sponsor proof without ever fabricating it.
+    """
+
+    root = Path(run_dir)
+    return [rel for rel in REQUIRED_LIVE_ZERO_ARTIFACTS if not (root / rel).is_file()]
+
+
+def capture_cli_install_proof(
+    artifacts: Any, *, cli: str | None = None, timeout_s: int = DEFAULT_TIMEOUT_S
+) -> str:
+    """Capture ``zero --version``/``--help`` output as installation proof.
+
+    Raises :class:`ZeroCliError` if the CLI is absent — it never invents proof.
+    """
+
+    exe = cli or os.environ.get("ZERO_CLI", "zero")
+    for flags in (["--version"], ["--help"]):
+        try:
+            proc = subprocess.run([exe, *flags], text=True, capture_output=True, timeout=timeout_s)
+        except FileNotFoundError as exc:
+            raise ZeroCliError(f"Zero CLI not found: {exe!r}") from exc
+        except subprocess.TimeoutExpired as exc:
+            raise ZeroCliError("zero install-proof capture timed out") from exc
+        if proc.returncode == 0:
+            text = f"$ {exe} {' '.join(flags)}\n{proc.stdout}\n{proc.stderr}"
+            return str(artifacts.write_text("zero/cli_install_proof.txt", text))
+    raise ZeroCliError("could not capture Zero CLI install proof")

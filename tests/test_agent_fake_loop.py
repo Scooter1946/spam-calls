@@ -30,8 +30,17 @@ from agent.tool_author import (
     parse_git_status_porcelain,
 )
 from agent.tool_registry import ToolRegistry
-from contracts.models import Evidence, RunSpec
+from contracts.models import Evidence, RunSpec, ServiceMatch
 from datetime import datetime, timezone
+from integrations.zero_client import (
+    REQUIRED_LIVE_ZERO_ARTIFACTS,
+    ZeroClient,
+    ZeroCliError,
+    select_within_budget,
+    validate_live_proof,
+)
+import os
+import stat
 
 
 # --------------------------------------------------------------------------- #
@@ -382,3 +391,85 @@ def test_redact_masks_sensitive_keys_at_any_depth():
     assert out["nested"]["keep"] == 2
     assert out["list"][0]["phone"] == "***REDACTED***"
     assert out["list"][0]["note"] == "hi"
+
+
+# --------------------------------------------------------------------------- #
+# Live Zero adapter (pure selection + real subprocess via a stub CLI)
+# --------------------------------------------------------------------------- #
+
+
+def test_select_within_budget_prefers_cheapest_affordable():
+    matches = [
+        ServiceMatch(service_id="a", name="A", description="", price_cents=300),
+        ServiceMatch(service_id="b", name="B", description="", price_cents=120),
+        ServiceMatch(service_id="c", name="C", description="", price_cents=9000),
+    ]
+    assert select_within_budget(matches, 5000).service_id == "b"
+    assert select_within_budget(matches, 100) is None
+    # unpriced fallback when nothing is priced
+    unpriced = [ServiceMatch(service_id="u", name="U", description="")]
+    assert select_within_budget(unpriced, 5000).service_id == "u"
+
+
+def _write_stub_zero_cli(tmp_path: Path) -> str:
+    script = tmp_path / "zero"
+    script.write_text(
+        "#!/bin/bash\n"
+        'case "$2" in\n'
+        '  search) echo \'{"services":[{"id":"svc-1","name":"Enrich","description":"company enrichment","price_cents":120}]}\';;\n'
+        '  invoke) echo \'{"ok":true,"result":{"statement":"Northstar is hiring"},"receipt":{"receipt_id":"r1","amount_cents":120}}\';;\n'
+        "  *) echo '{}';;\n"
+        "esac\n"
+    )
+    script.chmod(script.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+    return str(script)
+
+
+def test_zero_client_search_and_invoke_against_stub_cli(tmp_path):
+    cli = _write_stub_zero_cli(tmp_path)
+    artifacts = Artifacts(run_dir=tmp_path / "run")
+    client = ZeroClient(artifacts=artifacts, cli=cli)
+
+    matches = client.search("company enrichment for sales personalization")
+    assert len(matches) == 1
+    assert matches[0].service_id == "svc-1" and matches[0].price_cents == 120
+
+    result = client.invoke(matches[0], {"candidate_id": "maya_chen"})
+    assert result.ok is True
+    assert result.amount_cents == 120  # taken from the receipt, not assumed
+    assert result.result["statement"] == "Northstar is hiring"
+
+    # raw artifacts preserved under the run dir
+    run = tmp_path / "run"
+    assert (run / "zero/search_fact_a.json").is_file()
+    assert (run / "zero/search_stdio.json").is_file()
+    assert (run / "zero/fact_a_result.json").is_file()
+    assert (run / "zero/fact_a_receipt.json").is_file()
+
+
+def test_zero_client_missing_cli_raises(tmp_path):
+    artifacts = Artifacts(run_dir=tmp_path / "run")
+    client = ZeroClient(artifacts=artifacts, cli="definitely-not-a-real-zero-binary-xyz")
+    with pytest.raises(ZeroCliError):
+        client.search("anything")
+
+
+def test_zero_client_nonzero_exit_raises(tmp_path):
+    script = tmp_path / "zero"
+    script.write_text("#!/bin/bash\necho 'boom' >&2\nexit 3\n")
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    artifacts = Artifacts(run_dir=tmp_path / "run")
+    client = ZeroClient(artifacts=artifacts, cli=str(script))
+    with pytest.raises(ZeroCliError):
+        client.search("anything")
+    # stdio is still preserved even on failure
+    assert (tmp_path / "run/zero/search_stdio.json").is_file()
+
+
+def test_validate_live_proof_reports_missing_then_complete(tmp_path):
+    run = tmp_path / "run"
+    (run / "zero").mkdir(parents=True)
+    assert set(validate_live_proof(run)) == set(REQUIRED_LIVE_ZERO_ARTIFACTS)
+    for rel in REQUIRED_LIVE_ZERO_ARTIFACTS:
+        (run / rel).write_text("proof")
+    assert validate_live_proof(run) == []
