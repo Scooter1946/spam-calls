@@ -47,6 +47,15 @@ cp .env.example .env
 demo/run_demo.sh
 ```
 
+## Visual demo
+
+```bash
+.venv/bin/python -m demo.ui
+```
+
+Open `http://127.0.0.1:8000`. The read-only dashboard selects the newest
+`runs/fake-demo.*` run by default; use the run picker to inspect another local run.
+
 ## Live configuration
 
 Set the environment variables listed in `.env.example`. For Nexla, expose the local sink with ngrok, configure one webhook → transform → REST destination flow, then set `NEXLA_SERVICE_KEY`, `NEXLA_INGRESS_URL`, `NEXLA_FLOW_ID`, and the public `NEXLA_SINK_URL`. Never commit their values.

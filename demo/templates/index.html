@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>PitchLoop · {{ model.run_name|default('Run inspector', true) }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', path='dashboard.css') }}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to run proof</a>
+
+  <header class="masthead">
+    <div class="brand-lockup" aria-label="PitchLoop proof console">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <p class="kicker">Autonomous evidence loop</p>
+        <h1>Pitch<span>Loop</span></h1>
+      </div>
+    </div>
+
+    <div class="run-controls">
+      <span class="mode-badge{% if model.mode|default('FAKE / LOCAL', true) == 'LIVE' %} mode-badge--live{% endif %}">
+        <span aria-hidden="true"></span>{{ model.mode|default('FAKE / LOCAL', true) }}
+      </span>
+      <form class="run-picker" method="get" action="/" aria-label="Choose demo run">
+        <label for="run">Run</label>
+        <select id="run" name="run">
+          {% for run in runs|default([]) %}
+            <option value="{{ run }}"{% if run == model.run_name %} selected{% endif %}>{{ run }}</option>
+          {% else %}
+            <option value="">No runs found</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Load run</button>
+      </form>
+    </div>
+  </header>
+
+  <main id="main">
+    {% set summary = model.summary|default({}) %}
+    {% if not model.run_name %}
+      <section class="notice notice--error" role="alert" aria-labelledby="error-title">
+        <p class="section-code">Readout / unavailable</p>
+        <h2 id="error-title">Run artifacts could not be loaded</h2>
+        <p>{{ model.errors|default(['No local demo runs were found.'])|join(' · ') }}</p>
+        <p class="notice-hint">Choose another local run above, or generate one with <code>./demo/run_demo.sh</code>.</p>
+      </section>
+    {% else %}
+      {% if model.errors %}
+        <aside class="warning-strip" aria-label="Artifact warnings">
+          <strong>Partial readout</strong>
+          <ul>
+            {% for warning in model.errors %}<li>{{ warning }}</li>{% endfor %}
+          </ul>
+        </aside>
+      {% endif %}
+
+      <section class="run-hero" aria-labelledby="run-title">
+        <div class="hero-copy">
+          <p class="section-code">Run / {{ model.run_name|default('unknown', true) }}</p>
+          <h2 id="run-title">
+            {% if summary.outcome|default('') == 'MEETING_BOOKED' %}
+              The loop closed.
+            {% else %}
+              Run evidence readout.
+            {% endif %}
+          </h2>
+          <p class="hero-deck">
+            One rejected call became a diagnosed evidence gap, a self-authored tool, and a qualified meeting.
+          </p>
+        </div>
+
+        <div class="outcome-stamp{% if summary.outcome|default('') != 'MEETING_BOOKED' %} outcome-stamp--neutral{% endif %}">
+          <span>Outcome</span>
+          <strong>{{ summary.outcome|default('Unknown', true)|replace('_', ' ') }}</strong>
+          <small>{{ summary.final_state|default('State unavailable', true)|replace('_', ' ') }}</small>
+        </div>
+
+        <dl class="summary-rack">
+          <div>
+            <dt>Candidate</dt>
+            <dd>{{ summary.candidate|default('—', true)|replace('_', ' ') }}</dd>
+          </div>
+          <div>
+            <dt>Calls placed</dt>
+            <dd>{{ summary.calls_placed|default('—', true) }}</dd>
+          </div>
+          <div>
+            <dt>Spend / budget</dt>
+            <dd>
+              {% if summary.spent_cents is number %}${{ '%.2f'|format(summary.spent_cents / 100) }}{% else %}—{% endif %}
+              <span>{% if summary.budget_cents is number %}/ ${{ '%.2f'|format(summary.budget_cents / 100) }}{% endif %}</span>
+            </dd>
+          </div>
+          <div>
+            <dt>Elapsed</dt>
+            <dd>{{ summary.elapsed|default('—', true) }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      {% set calls = namespace(one={}, two={}, pitch_one='', pitch_two='', transcript_one='', transcript_two='') %}
+      {% for detail in model.details|default([]) %}
+        {% if detail.key == 'call-1' %}{% set calls.one = detail.content %}{% endif %}
+        {% if detail.key == 'call-2' %}{% set calls.two = detail.content %}{% endif %}
+        {% if detail.key == 'pitch-1' %}{% set calls.pitch_one = detail.content %}{% endif %}
+        {% if detail.key == 'pitch-2' %}{% set calls.pitch_two = detail.content %}{% endif %}
+        {% if detail.key == 'transcript-1' %}{% set calls.transcript_one = detail.content %}{% endif %}
+        {% if detail.key == 'transcript-2' %}{% set calls.transcript_two = detail.content %}{% endif %}
+      {% endfor %}
+
+      <section class="circuit-section" aria-labelledby="circuit-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-code">01 / Causal proof</p>
+            <h2 id="circuit-title">Failure became capability</h2>
+          </div>
+          <p>The recovery path is reconstructed from the run’s artifacts—not a second state machine.</p>
+        </div>
+
+        <div class="proof-circuit">
+          <article class="call-node call-node--{% if calls.one.status|default('') == 'rejected' %}failed{% else %}pending{% endif %}">
+            <div class="node-index">Call 01</div>
+            {% if calls.one.status|default('') == 'rejected' %}
+              <p class="node-signal"><span aria-hidden="true"></span> Rejected</p>
+              <h3>Missing the deadline signal</h3>
+              <p>The first pitch knew the hiring signal, but not Northstar’s API v1 migration deadline.</p>
+            {% else %}
+              <p class="node-signal"><span aria-hidden="true"></span> Pending</p>
+              <h3>Call 1 not recorded</h3>
+              <p>This run does not yet contain a rejected first call.</p>
+            {% endif %}
+            <span class="node-port" aria-hidden="true"></span>
+          </article>
+
+          <div class="circuit-wire circuit-wire--in" aria-hidden="true"><i></i></div>
+
+          <article class="recovery-node">
+            <div class="recovery-head">
+              <span class="node-index">Evidence workbench</span>
+              <span class="recovery-count">{{ model.flow_steps|default([])|length }} checkpoints</span>
+            </div>
+            <ol class="recovery-path" aria-label="Evidence recovery steps">
+              {% for step in model.flow_steps|default([]) %}
+                <li class="flow-step flow-step--{% if step.completed %}completed{% else %}pending{% endif %}">
+                  <span class="flow-marker" aria-hidden="true"></span>
+                  <div>
+                    <strong>{{ step.label }}</strong>
+                    <small>{{ step.detail }}</small>
+                  </div>
+                  <span class="flow-status">{% if step.completed %}done{% else %}pending{% endif %}</span>
+                </li>
+              {% else %}
+                <li class="empty-row">No recovery checkpoints are available.</li>
+              {% endfor %}
+            </ol>
+          </article>
+
+          <div class="circuit-wire circuit-wire--out" aria-hidden="true"><i></i></div>
+
+          <article class="call-node call-node--outbound call-node--{% if calls.two.status|default('') == 'booked' %}booked{% else %}pending{% endif %}">
+            <div class="node-index">Call 02</div>
+            {% if calls.two.status|default('') == 'booked' %}
+              <p class="node-signal"><span aria-hidden="true"></span> Qualified</p>
+              <h3>Deadline evidence landed</h3>
+              <p>The revised pitch cited both facts. Maya accepted a 20-minute meeting.</p>
+            {% else %}
+              <p class="node-signal"><span aria-hidden="true"></span> Pending</p>
+              <h3>Call 2 not recorded</h3>
+              <p>This run has not yet booked a second call.</p>
+            {% endif %}
+            <span class="node-port" aria-hidden="true"></span>
+          </article>
+        </div>
+      </section>
+
+      {% if calls.one or calls.two %}
+        <section class="compare-section" aria-labelledby="compare-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-code">02 / Before → after</p>
+              <h2 id="compare-title">One claim changed the call</h2>
+            </div>
+            <p>Compare each pitch, outcome record, and response side by side.</p>
+          </div>
+
+          <div class="call-compare">
+            <article class="call-panel call-panel--failed">
+              <header>
+                <div><span>Attempt A</span><h3>Call 1</h3></div>
+                <strong>{{ calls.one.status|default('Unavailable', true)|replace('_', ' ') }}</strong>
+              </header>
+              <div class="claim-ledger">
+                <p>Outcome evidence</p>
+                <ul>
+                  {% for item in model.evidence if item.kind == 'call' and item.source_ref == calls.one.provider_ref %}<li><code>{{ item.evidence_id }}</code></li>{% else %}<li>None recorded</li>{% endfor %}
+                </ul>
+                {% if calls.one.missing_claims %}<p class="missing-claim">Missing: {{ calls.one.missing_claims|join(', ') }}</p>{% endif %}
+              </div>
+              {% if calls.pitch_one %}<blockquote>{{ calls.pitch_one }}</blockquote>{% endif %}
+              {% if calls.transcript_one %}
+                <details>
+                  <summary>Read call transcript</summary>
+                  <p class="transcript">“{{ calls.transcript_one }}”</p>
+                </details>
+              {% endif %}
+            </article>
+
+            <div class="compare-delta" aria-label="Fact B added before second call">
+              <span>+ Fact B</span>
+              <small>August 30 API v1 migration deadline</small>
+            </div>
+
+            <article class="call-panel call-panel--booked">
+              <header>
+                <div><span>Attempt B</span><h3>Call 2</h3></div>
+                <strong>{{ calls.two.status|default('Unavailable', true)|replace('_', ' ') }}</strong>
+              </header>
+              <div class="claim-ledger">
+                <p>Outcome evidence</p>
+                <ul>
+                  {% for item in model.evidence if item.kind == 'call' and item.source_ref == calls.two.provider_ref %}<li><code>{{ item.evidence_id }}</code></li>{% else %}<li>None recorded</li>{% endfor %}
+                </ul>
+                {% if calls.two.missing_claims %}<p class="missing-claim">Missing: {{ calls.two.missing_claims|join(', ') }}</p>{% else %}<p class="complete-claim">Evidence set complete</p>{% endif %}
+              </div>
+              {% if calls.pitch_two %}<blockquote>{{ calls.pitch_two }}</blockquote>{% endif %}
+              {% if calls.transcript_two %}
+                <details>
+                  <summary>Read call transcript</summary>
+                  <p class="transcript">“{{ calls.transcript_two }}”</p>
+                </details>
+              {% endif %}
+            </article>
+          </div>
+        </section>
+      {% endif %}
+
+      <div class="readout-grid">
+        <section class="timeline-section" aria-labelledby="timeline-title">
+          <div class="section-heading section-heading--compact">
+            <div>
+              <p class="section-code">03 / Event stream</p>
+              <h2 id="timeline-title">Canonical timeline</h2>
+            </div>
+            <span class="event-count">{{ model.events|default([])|length }} events</span>
+          </div>
+
+          <ol class="event-stream">
+            {% for event in model.events|default([]) %}
+              <li class="event event--{% if event.type in ['meeting_booked', 'run_finished', 'pr_merged', 'tool_conformance'] %}success{% elif event.type in ['diagnosis', 'call_placed', 'tool_authored'] %}active{% else %}neutral{% endif %}">
+                <time datetime="{{ event.ts|default('', true) }}">#{{ '%02d'|format(event.sequence) }}<br>{{ event.ts[11:19] if event.ts|length >= 19 else '—' }}</time>
+                <span class="event-dot" aria-hidden="true"></span>
+                <div>
+                  <span class="event-type">{{ event.type|default('event', true)|replace('_', ' ') }}</span>
+                  <strong>
+                    {% if event.type == 'transition' %}{{ event['from']|default('Unknown')|replace('_', ' ') }} → {{ event.to|default('Unknown')|replace('_', ' ') }}
+                    {% elif event.state %}{{ event.state|replace('_', ' ') }}
+                    {% elif event.claim %}{{ event.claim|replace('_', ' ') }} recorded
+                    {% else %}{{ event.type|default('Recorded event', true)|replace('_', ' ') }}{% endif %}
+                  </strong>
+                  {% if event.evidence_id %}<p>Linked evidence · <code>{{ event.evidence_id }}</code></p>
+                  {% elif event.missing %}<p>Missing {{ event.missing|join(', ') }} · next: {{ event.next_action|default('unknown')|replace('_', ' ') }}</p>
+                  {% elif event.selected_candidate %}<p>Candidate {{ event.selected_candidate|replace('_', ' ') }}</p>{% endif %}
+                </div>
+              </li>
+            {% else %}
+              <li class="empty-row">No chronological events are available for this run.</li>
+            {% endfor %}
+          </ol>
+        </section>
+
+        <section class="evidence-section" aria-labelledby="evidence-title">
+          <div class="section-heading section-heading--compact">
+            <div>
+              <p class="section-code">04 / Lineage</p>
+              <h2 id="evidence-title">Evidence chain</h2>
+            </div>
+          </div>
+
+          {% if model.diagnosis %}
+            <div class="diagnosis-banner">
+              <span>Diagnosis</span>
+              <strong>Present: {{ model.diagnosis.present_claims|default([])|join(', ')|default('none', true) }}</strong>
+              <strong class="diagnosis-missing">Missing: {{ model.diagnosis.missing_claims|default([])|join(', ')|default('none', true) }}</strong>
+              <small>Next action · {{ model.diagnosis.next_action|default('not recorded', true)|replace('_', ' ') }}</small>
+            </div>
+          {% endif %}
+
+          <div class="evidence-groups">
+            <section class="evidence-group" aria-labelledby="evidence-group-1">
+                <h3 id="evidence-group-1"><span>01</span>Normalized records</h3>
+                <div class="evidence-stack">
+                  {% for item in model.evidence|default([]) %}
+                    <article class="evidence-card">
+                      <div class="evidence-topline">
+                        <span class="claim-tag">{{ item.claim|default('claim', true)|replace('_', ' ') }}</span>
+                        <span>
+                          {% if item.diagnosis_cited %}<span class="cited-tag">Cited in diagnosis</span>{% endif %}
+                          {% if item.policy_decision %}<span class="decision decision--{{ item.policy_decision }}">{{ item.policy_decision }}</span>{% endif %}
+                        </span>
+                      </div>
+                      <code class="evidence-id">{{ item.evidence_id|default('ID unavailable', true) }}</code>
+                      {% if item.value.statement %}<p class="evidence-value">{{ item.value.statement }}</p>
+                      {% elif item.value.code %}<p class="evidence-value">{{ item.value.code|replace('_', ' ') }}{% if item.value.status %} · {{ item.value.status }}{% endif %}</p>
+                      {% elif item.value.reason %}<p class="evidence-value">{{ item.value.reason|replace('_', ' ') }}</p>{% endif %}
+                      <dl>
+                        <div><dt>Source</dt><dd>{{ item.source|default('—', true) }}</dd></div>
+                        {% if item.source_ref %}<div><dt>Reference</dt><dd>{{ item.source_ref }}</dd></div>{% endif %}
+                        {% if item.occurred_at %}<div><dt>Observed</dt><dd>{{ item.occurred_at }}</dd></div>{% endif %}
+                        {% if item.provenance %}<div><dt>Provenance</dt><dd>{{ item.provenance.raw_type|default('record') }}{% if item.provenance.correlation_id %} · {{ item.provenance.correlation_id }}{% endif %}</dd></div>{% endif %}
+                      </dl>
+                      {% if item.raw_artifact or item.normalized_artifact %}
+                        <details class="lineage-detail">
+                          <summary>Trace raw → normalized</summary>
+                          <pre>raw: {{ item.raw_artifact|default('not retained', true) }}
+normalized: {{ item.normalized_artifact|default('not retained', true) }}</pre>
+                        </details>
+                      {% endif %}
+                    </article>
+                  {% else %}
+                    <p class="empty-row">No normalized evidence is available for this run.</p>
+                  {% endfor %}
+                </div>
+            </section>
+          </div>
+        </section>
+      </div>
+
+      {% if model.details %}
+        <section class="artifact-section" aria-labelledby="artifact-title">
+          <div class="section-heading">
+            <div>
+              <p class="section-code">05 / Artifact drawer</p>
+              <h2 id="artifact-title">Inspect the receipts</h2>
+            </div>
+            <p>Read-only payloads from the selected run.</p>
+          </div>
+          <div class="artifact-drawer">
+            {% for detail in model.details %}
+              <details class="artifact artifact--{{ detail.kind|default('record', true) }}">
+                <summary>
+                  <span>{{ detail.kind|default('artifact', true)|replace('_', ' ') }}</span>
+                  <strong>{{ detail.label|default('Run artifact', true) }}</strong>
+                  <i aria-hidden="true"></i>
+                </summary>
+                <pre>{{ detail.formatted|default('No content available.', true) }}</pre>
+              </details>
+            {% endfor %}
+          </div>
+        </section>
+      {% endif %}
+    {% endif %}
+  </main>
+
+  <footer>
+    <span>PitchLoop proof console</span>
+    <span>Read-only local artifact projection</span>
+  </footer>
+</body>
+</html>
