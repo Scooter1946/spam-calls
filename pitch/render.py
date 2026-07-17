@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 _FORBIDDEN_INTERNAL_TERMS = ("zero.xyz", "pomerium", "nexla", "hackathon")
-_MAX_WORDS = 69
+_MAX_WORDS = 120
 
 
 def _field(item: Any, name: str, default: Any = None) -> Any:
