@@ -1,0 +1,44 @@
+services:
+  pomerium:
+    image: "pomerium/pomerium:${POMERIUM_IMAGE_TAG:-v0.32.7}"
+    environment:
+      POMERIUM_ZERO_TOKEN: "${POMERIUM_ZERO_TOKEN:?set POMERIUM_ZERO_TOKEN in infra/pomerium/.env}"
+      XDG_CACHE_HOME: /var/cache
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    volumes:
+      - pomerium-cache:/var/cache
+    networks:
+      - pitchloop-policy
+
+  policy-target:
+    container_name: pitchloop-policy-target
+    build:
+      context: ../..
+      dockerfile: infra/policy_target/Dockerfile
+    expose:
+      - "8080"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json, urllib.request;
+          assert json.load(urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2))['status'] == 'ok'
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    restart: unless-stopped
+    networks:
+      pitchloop-policy:
+        aliases:
+          - policy-target
+
+networks:
+  pitchloop-policy: {}
+
+volumes:
+  pomerium-cache: {}

@@ -1,0 +1,29 @@
+# Declarative blueprint for the two Pomerium Zero routes and policies.
+# Apply these values in the Zero console (or its management API) after the
+# local data plane in docker-compose.yml has connected. The service-account
+# user ID must match POMERIUM_SERVICE_ACCOUNT_USER_ID.
+upstream: http://policy-target:8080
+service_account_user_id: pitchloop-agent
+routes:
+  - name: pitchloop-policy-denied
+    from: https://pitchloop-denied.YOUR_STARTER_DOMAIN.pomerium.app
+    to:
+      - http://policy-target:8080
+    policy:
+      allow:
+        and:
+          - user:
+              is: pitchloop-agent
+      deny:
+        and:
+          - user:
+              is: pitchloop-agent
+  - name: pitchloop-policy-allowed
+    from: https://pitchloop-allowed.YOUR_STARTER_DOMAIN.pomerium.app
+    to:
+      - http://policy-target:8080
+    policy:
+      allow:
+        and:
+          - user:
+              is: pitchloop-agent
