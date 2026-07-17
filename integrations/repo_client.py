@@ -271,15 +271,15 @@ class GitHubRepoPort:
 
     def create_agent_pr(self, files: list[str], title: str, body: str) -> PullRequest:
         del title, body
-        validated = _validate_requested_paths(files)
-        conformance_path, conformance = self._require_conformance()
-        diagnosis_path, failed_call_evidence_id = self._require_diagnosis()
-        no_match_path = self._run_dir / "zero/search_fact_b.json"
-        _read_json_object(no_match_path, "Zero Fact B no-match artifact")
-        self._validate_physical_files(validated)
-
         git_outputs: dict[str, str] = {}
         try:
+            validated = _validate_requested_paths(files)
+            conformance_path, conformance = self._require_conformance()
+            diagnosis_path, failed_call_evidence_id = self._require_diagnosis()
+            no_match_path = self._run_dir / "zero/search_fact_b.json"
+            _read_json_object(no_match_path, "Zero Fact B no-match artifact")
+            self._validate_physical_files(validated)
+
             status = self._run(["git", "status", "--porcelain=v1", "--untracked-files=all"])
             changed_paths = _status_paths(status)
             if changed_paths != set(validated):
@@ -289,8 +289,7 @@ class GitHubRepoPort:
                     f"worktree must contain only the three generated files; extra={extra}, missing={missing}"
                 )
 
-            remote_value = self._github_repo or self._run(["git", "config", "--get", "remote.origin.url"])
-            repository = _repo_slug(remote_value)
+            repository = self._repository()
             pr_body = self._build_pr_body(
                 failed_call_evidence_id=failed_call_evidence_id,
                 diagnosis_path=diagnosis_path,
@@ -412,14 +411,12 @@ class GitHubRepoPort:
             raise
 
     def merge(self, pr: PullRequest) -> MergeResult:
-        if pr.branch != self.branch_name:
-            raise RepoValidationError("refusing to merge a PR from an unconstrained branch")
-        if set(pr.files) != ALLOWED_GENERATED_PATHS:
-            raise RepoValidationError("refusing to merge a PR with files outside the allowlist")
-
-        remote_value = self._github_repo or self._run(["git", "config", "--get", "remote.origin.url"])
-        repository = _repo_slug(remote_value)
         try:
+            if pr.branch != self.branch_name:
+                raise RepoValidationError("refusing to merge a PR from an unconstrained branch")
+            if set(pr.files) != ALLOWED_GENERATED_PATHS:
+                raise RepoValidationError("refusing to merge a PR with files outside the allowlist")
+            repository = self._repository()
             merge_stdout = self._run(
                 [
                     "gh",
@@ -466,7 +463,7 @@ class GitHubRepoPort:
                 },
             )
             return result
-        except (RepoOperationError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        except (RepoValidationError, RepoOperationError, json.JSONDecodeError, TypeError, ValueError) as exc:
             _write_json_artifact(
                 self._artifacts,
                 self._run_dir,
@@ -480,6 +477,18 @@ class GitHubRepoPort:
                 },
             )
             raise
+
+    def _repository(self) -> str:
+        origin = self._run(["git", "config", "--get", "remote.origin.url"])
+        origin_repository = _repo_slug(origin)
+        if not self._github_repo:
+            return origin_repository
+        configured_repository = _repo_slug(self._github_repo)
+        if configured_repository != origin_repository:
+            raise RepoValidationError(
+                "GITHUB_REPO does not match remote.origin.url; refusing to push to an ambiguous target"
+            )
+        return configured_repository
 
     def _run(self, command: list[str]) -> str:
         try:

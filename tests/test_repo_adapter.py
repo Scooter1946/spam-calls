@@ -138,11 +138,14 @@ def test_rejects_symlink_escape(tmp_path: Path) -> None:
 
 def test_rejects_failed_conformance_before_any_command(tmp_path: Path) -> None:
     runner = RecordingRunner()
-    port, _, _ = _live_port(tmp_path, runner, conformance_passed=False)
+    port, _, run_dir = _live_port(tmp_path, runner, conformance_passed=False)
 
     with pytest.raises(RepoValidationError, match="conformance did not pass"):
         port.create_agent_pr(sorted(ALLOWED_GENERATED_PATHS), "ignored", "ignored")
     assert runner.calls == []
+    failure = json.loads((run_dir / "repo/pr.json").read_text())
+    assert failure["status"] == "failed"
+    assert failure["error_type"] == "RepoValidationError"
 
 
 def test_rejects_extra_modified_worktree_file(tmp_path: Path) -> None:
@@ -151,6 +154,22 @@ def test_rejects_extra_modified_worktree_file(tmp_path: Path) -> None:
 
     with pytest.raises(RepoValidationError, match=r"extra=\['README.md'\]"):
         port.create_agent_pr(sorted(ALLOWED_GENERATED_PATHS), "ignored", "ignored")
+
+
+def test_rejects_github_repo_that_does_not_match_origin(tmp_path: Path) -> None:
+    runner = RecordingRunner()
+    repo_root, run_dir = _fixture(tmp_path)
+    port = GitHubRepoPort(
+        repo_root=repo_root,
+        run_id="demo-001",
+        run_dir=run_dir,
+        github_repo="different/repository",
+        runner=runner,
+    )
+
+    with pytest.raises(RepoValidationError, match="does not match remote.origin.url"):
+        port.create_agent_pr(sorted(ALLOWED_GENERATED_PATHS), "ignored", "ignored")
+    assert not any(call[:2] == ["git", "switch"] for call in runner.calls)
 
 
 def test_builds_exact_branch_commit_and_pr_metadata_and_parses_gh_json(tmp_path: Path) -> None:
