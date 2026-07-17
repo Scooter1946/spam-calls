@@ -49,6 +49,19 @@ def normalize_raw(
     """Mirror the single Nexla transform for local tests and fake runs."""
 
     raw_type = str(payload.get("type") or event_type)
+    evidence_fields = {"run_id", "kind", "claim", "value", "source", "occurred_at"}
+    if evidence_fields <= payload.keys():
+        provenance = dict(payload.get("provenance") or {})
+        provenance.update({"correlation_id": correlation_id, "raw_type": raw_type})
+        return Evidence.model_validate(
+            {
+                **payload,
+                "evidence_id": payload.get("evidence_id")
+                or f"ev_{payload['kind']}_{correlation_id}",
+                "provenance": provenance,
+            }
+        )
+
     family = _ALIASES.get(raw_type) or _ALIASES.get(event_type)
     if not family:
         raise ValueError(f"unsupported evidence event type: {raw_type}")

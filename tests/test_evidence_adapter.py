@@ -95,6 +95,30 @@ def test_normalization_semantics(event_type, payload, kind, claim, prefix):
     assert evidence.provenance["correlation_id"] == "corr-1"
 
 
+def test_p1_evidence_shaped_payload_is_accepted():
+    evidence = normalize_raw(
+        "enrichment_purchased",
+        {
+            "run_id": "demo-001",
+            "candidate_id": "maya_chen",
+            "kind": "enrichment",
+            "claim": "fact_a",
+            "value": {"statement": "Northstar is migrating APIs."},
+            "source": "zero.xyz",
+            "source_ref": "receipt-1",
+            "occurred_at": NOW,
+            "provenance": {"service_id": "svc-1"},
+        },
+        "corr-p1",
+    )
+    assert evidence.evidence_id == "ev_enrichment_corr-p1"
+    assert evidence.provenance == {
+        "service_id": "svc-1",
+        "correlation_id": "corr-p1",
+        "raw_type": "enrichment_purchased",
+    }
+
+
 def test_store_deduplicates_persists_and_filters(tmp_path):
     store = EvidenceStore(tmp_path / "runs")
     later = normalize_raw("tool.result", tool_event(timestamp="2026-07-18T12:00:00Z"), "corr-2")
