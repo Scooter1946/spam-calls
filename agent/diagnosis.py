@@ -25,7 +25,12 @@ class Diagnosis(BaseModel):
     next_action: Literal["discover_capability", "retry_call", "finalize"]
 
 
-def build_diagnosis(spec: RunSpec, evidence: list[Evidence]) -> Diagnosis:
+def build_diagnosis(
+    spec: RunSpec,
+    evidence: list[Evidence],
+    *,
+    candidate_id: str | None = None,
+) -> Diagnosis:
     """Diagnose required-claim coverage from normalized evidence.
 
     ``evidence_ids`` cites the normalized call evidence together with the
@@ -34,18 +39,25 @@ def build_diagnosis(spec: RunSpec, evidence: list[Evidence]) -> Diagnosis:
     """
 
     required = list(spec.required_claims)
+    relevant = [
+        ev for ev in evidence if candidate_id is None or ev.candidate_id == candidate_id
+    ]
 
     present: list[str] = []
     fact_ids: list[str] = []
-    for ev in evidence:
+    for ev in relevant:
         if ev.claim in required and ev.kind in FACT_KINDS:
             fact_ids.append(ev.evidence_id)
             if ev.claim not in present:
                 present.append(ev.claim)
 
     missing = [claim for claim in required if claim not in present]
-    call_ids = [ev.evidence_id for ev in evidence if ev.kind == "call"]
-    meeting_booked = any(ev.kind == "meeting" for ev in evidence)
+    call_ids = [ev.evidence_id for ev in relevant if ev.kind == "call"]
+    meeting_booked = any(
+        ev.kind == "meeting"
+        or (ev.kind == "call" and ev.value.get("status") == "booked")
+        for ev in relevant
+    )
 
     if missing:
         # A required claim is still absent; the loop must acquire a capability

@@ -9,14 +9,16 @@ failures become artifacts rather than silent crashes.
 
 from __future__ import annotations
 
+import os
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Callable
 
 from agent.artifacts import Artifacts
 from agent.diagnosis import build_diagnosis
 from agent.planner import build_plan
+from agent.reflection import reflect_on_call
 from agent.state import TERMINAL_STATES, RunState, State
 from agent.tool_author import (
     CANONICAL_MANIFEST,
@@ -27,12 +29,14 @@ from agent.tool_author import (
 )
 from contracts.events import EventType
 from contracts.models import (
+    ActionReceipt,
     CallResult,
     Evidence,
     PaidResult,
     PolicyDecision,
     RunSpec,
     ServiceMatch,
+    StrategyReceipt,
 )
 from contracts.ports import CallPort, EvidencePort, PolicyPort, RepoPort, ZeroPort
 from integrations.zero_client import select_within_budget
@@ -79,7 +83,7 @@ class Deps:
     registry: Any  # ToolRegistryPort (reload/find)
     author: AuthorPort
     artifacts: Artifacts
-    render_pitch: Callable[[RunSpec, str, list[Evidence]], str]
+    render_pitch: Callable[..., str]
     build_call_port: Callable[..., CallPort]
     run_conformance: Callable[[str], ConformanceResult]
     git_status: Callable[[], list[str]]
@@ -144,6 +148,14 @@ class Orchestrator:
         self.call_port: CallPort | None = None
         self._selected_service: ServiceMatch | None = None
         self._author_request: AuthorRequest | None = None
+        self._last_diagnosis: Any | None = None
+        self._action_counter = 0
+        try:
+            self._step_delay_seconds = max(
+                0.0, float(os.environ.get("PITCHLOOP_STEP_DELAY_SECONDS", "0"))
+            )
+        except ValueError as exc:
+            raise ValueError("PITCHLOOP_STEP_DELAY_SECONDS must be a number") from exc
         self._handlers: dict[State, Callable[[], State]] = {
             State.LOAD_SPEC: self._load_spec,
             State.PLAN: self._plan,
@@ -154,6 +166,7 @@ class Orchestrator:
             State.GENERATE_PITCH: self._generate_pitch,
             State.CALL: self._call,
             State.DIAGNOSE: self._diagnose,
+            State.REFLECT: self._reflect,
             State.DISCOVER_FACT_B: self._discover_fact_b,
             State.AUTHOR_TOOL: self._author_tool,
             State.TEST_TOOL: self._test_tool,
@@ -177,6 +190,8 @@ class Orchestrator:
                 state = self._fail(f"exceeded max steps ({self.config.max_steps})")
                 break
             self._emit(EventType.STATE_ENTER, {"state": str(state)})
+            if self._step_delay_seconds:
+                time.sleep(self._step_delay_seconds)
             try:
                 next_state = self._handlers[state]()
             except Exception as exc:  # noqa: BLE001 - failures become artifacts
@@ -197,6 +212,10 @@ class Orchestrator:
         plan = build_plan(self.spec)
         self.state.ranked_candidates = plan.ranked_candidates
         self.deps.artifacts.write_json("plan.json", plan)
+        self.deps.registry.reload()
+        self._write_strategy()
+        if self.deps.registry.find("fact_b") is not None:
+            self._emit(EventType.TOOL_REUSED, {"capability": "fact_b", "scope": "prior_run"})
         return State.SELECT_CANDIDATE
 
     def _select_candidate(self) -> State:
@@ -205,6 +224,12 @@ class Orchestrator:
             return self._fail("no remaining candidates to try")
         self.state.current_candidate = untried[0]
         self.state.tried_candidates.append(untried[0])
+        self.state.fact_a = None
+        self.state.fact_b = None
+        self.state.pitch_text = None
+        self.state.last_call = None
+        self.state.last_call_evidence = None
+        self._last_diagnosis = None
         self._emit(EventType.STATE_ENTER, {"selected_candidate": untried[0]})
         return State.POLICY_CHECK
 
@@ -216,6 +241,7 @@ class Orchestrator:
         )
         rel = "policy/deny.json" if not decision.allowed else "policy/allow.json"
         self.deps.artifacts.write_json(rel, decision)
+        self.deps.artifacts.write_json(f"contacts/{candidate}/policy.json", decision)
         self._publish_evidence(
             kind="policy",
             claim="policy",
@@ -234,6 +260,12 @@ class Orchestrator:
         matches = self.deps.zero.search(self.config.fact_a_capability)
         self.deps.artifacts.write_json(
             "zero/search_fact_a.json",
+            {"capability": self.config.fact_a_capability, "matches": [m.model_dump() for m in matches]},
+        )
+        candidate = self.state.current_candidate
+        assert candidate is not None
+        self.deps.artifacts.write_json(
+            f"contacts/{candidate}/zero_search.json",
             {"capability": self.config.fact_a_capability, "matches": [m.model_dump() for m in matches]},
         )
         self._emit(EventType.ZERO_SEARCH, {"capability": self.config.fact_a_capability, "n": len(matches)})
@@ -273,32 +305,69 @@ class Orchestrator:
             provenance={"service_id": service.service_id, "raw": result.raw_artifact_path},
             event_type=EventType.ENRICHMENT_PURCHASED,
         )
+        candidate = self.state.current_candidate
+        assert candidate is not None
+        call_key = self._next_call_key()
+        self.deps.artifacts.write_json(
+            f"calls/{call_key}/enrichment_receipt.json",
+            {
+                "candidate_id": candidate,
+                "evidence_id": self.state.fact_a.evidence_id,
+                "provider_ref": result.provider_ref,
+                "amount_cents": result.amount_cents,
+                "receipt": result.receipt,
+                "raw_artifact_path": result.raw_artifact_path,
+            },
+        )
+        if self.deps.registry.find("fact_b") is not None:
+            self._emit(
+                EventType.TOOL_REUSED,
+                {"capability": "fact_b", "candidate_id": candidate},
+            )
+            return State.COLLECT_FACT_B
         return State.GENERATE_PITCH
 
     def _generate_pitch(self) -> State:
         facts = self._fact_evidence()
         candidate = self.state.current_candidate
         assert candidate is not None
-        pitch = self.deps.render_pitch(self.spec, candidate, facts)
+        pitch = self.deps.render_pitch(
+            self.spec,
+            candidate,
+            facts,
+            strategy_tactics=self.state.strategy_tactics,
+        )
         self.state.pitch_text = pitch
-        self.deps.artifacts.write_text("pitch/pitch_1.md", pitch)
+        self.deps.artifacts.write_text(
+            f"pitch/pitch_{self.state.calls_placed + 1}.md", pitch
+        )
         # Build the call port now that Fact A is known (mirrors P2's factory).
         assert self.state.fact_a is not None
-        self.call_port = self.deps.build_call_port(
-            zero_port=self.deps.zero,
-            artifacts=self.deps.artifacts,
-            expected_fact_a=self.state.fact_a.value["statement"],
-            expected_fact_b_phrase=self.config.expected_fact_b_phrase,
-        )
+        if self.call_port is None:
+            self.call_port = self.deps.build_call_port(
+                zero_port=self.deps.zero,
+                artifacts=self.deps.artifacts,
+                expected_fact_a=self.state.fact_a.value["statement"],
+                expected_fact_b_phrase=self.config.expected_fact_b_phrase,
+                allowed_candidates=self.spec.candidates,
+                max_calls=self.spec.max_paid_calls,
+                one_call_per_candidate=True,
+            )
         return State.CALL
 
     def _call(self) -> State:
         return self._place_call(pitch=self.state.pitch_text or "")
 
     def _diagnose(self) -> State:
+        candidate = self.state.current_candidate
+        assert candidate is not None
         normalized = self.deps.evidence.query(self.spec.run_id)
-        diagnosis = build_diagnosis(self.spec, normalized)
+        diagnosis = build_diagnosis(self.spec, normalized, candidate_id=candidate)
+        self._last_diagnosis = diagnosis
         self.deps.artifacts.write_json("evidence/diagnosis.json", diagnosis)
+        self.deps.artifacts.write_json(
+            f"calls/{self._current_call_key()}/diagnosis.json", diagnosis
+        )
         self._emit(
             EventType.DIAGNOSIS,
             {
@@ -308,15 +377,60 @@ class Orchestrator:
                 "evidence_ids": diagnosis.evidence_ids,
             },
         )
-        if diagnosis.next_action == "discover_capability":
-            if "fact_b" in diagnosis.missing_claims:
-                return State.DISCOVER_FACT_B
-            if "fact_a" in diagnosis.missing_claims:
-                return State.DISCOVER_FACT_A
-            return self._fail(f"unknown missing claims: {diagnosis.missing_claims}")
-        if diagnosis.next_action == "retry_call":
-            return State.REGENERATE_PITCH
-        return State.FINALIZE
+        return State.REFLECT
+
+    def _reflect(self) -> State:
+        candidate = self.state.current_candidate
+        call = self.state.last_call
+        call_evidence = self.state.last_call_evidence
+        diagnosis = self._last_diagnosis
+        assert candidate is not None and call is not None and call_evidence is not None
+        assert diagnosis is not None
+
+        reflection, tactic = reflect_on_call(
+            run_id=self.spec.run_id,
+            call_number=self.state.calls_placed,
+            candidate_id=candidate,
+            call=call,
+            call_evidence_id=call_evidence.evidence_id,
+            strategy_version=self.state.strategy_version,
+        )
+        # A successful call still creates a new immutable strategy receipt: it
+        # records that the winning tactics should be preserved.
+        reflection.strategy_version_after = self.state.strategy_version + 1
+        call_key = self._current_call_key()
+        self.deps.artifacts.write_json(f"calls/{call_key}/reflection.json", reflection)
+        self.deps.artifacts.write_json(f"reflections/{call_key}.json", reflection)
+        self.state.reflection_ids.append(reflection.reflection_id)
+        if tactic and tactic not in self.state.strategy_tactics:
+            self.state.strategy_tactics.append(tactic)
+        self.state.strategy_version = reflection.strategy_version_after
+        self._emit(
+            EventType.REFLECTION_RECORDED,
+            {
+                "reflection_id": reflection.reflection_id,
+                "call_number": self.state.calls_placed,
+                "call_code": call.code,
+                "evidence_ids": [call_evidence.evidence_id],
+                "artifact_refs": [
+                    f"calls/{call_key}/reflection.json",
+                    f"reflections/{call_key}.json",
+                ],
+            },
+        )
+        self._write_strategy()
+        self._emit(
+            EventType.CANDIDATE_COMPLETED,
+            {"candidate_id": candidate, "call_number": self.state.calls_placed},
+        )
+
+        if call.status == "booked":
+            return State.FINALIZE
+        if self.state.calls_placed >= self.spec.max_paid_calls:
+            return self._fail(f"paid call limit reached ({self.spec.max_paid_calls})")
+        if "fact_b" in diagnosis.missing_claims and self.deps.registry.find("fact_b") is None:
+            return State.DISCOVER_FACT_B
+        return State.SELECT_CANDIDATE
 
     def _discover_fact_b(self) -> State:
         matches = self.deps.zero.search(self.config.fact_b_capability)
@@ -411,7 +525,7 @@ class Orchestrator:
         self._emit(EventType.TOOL_RELOADED, {"found_fact_b": handle is not None})
         if handle is None:
             return self._fail("fact_b capability not found after reload")
-        return State.COLLECT_FACT_B
+        return State.SELECT_CANDIDATE
 
     def _collect_fact_b(self) -> State:
         handle = self.deps.registry.find("fact_b")
@@ -432,13 +546,18 @@ class Orchestrator:
             provenance=payload.get("provenance", {}),
             event_type=EventType.RECEIPT_RECORDED,
         )
-        return State.REGENERATE_PITCH
+        return State.GENERATE_PITCH
 
     def _regenerate_pitch(self) -> State:
         facts = self._fact_evidence()
         candidate = self.state.current_candidate
         assert candidate is not None
-        pitch = self.deps.render_pitch(self.spec, candidate, facts)
+        pitch = self.deps.render_pitch(
+            self.spec,
+            candidate,
+            facts,
+            strategy_tactics=self.state.strategy_tactics,
+        )
         self.state.pitch_text = pitch
         self.deps.artifacts.write_text("pitch/pitch_2.md", pitch)
         return State.VERIFY_CALL
@@ -456,15 +575,24 @@ class Orchestrator:
         assert self.call_port is not None
         candidate = self.state.current_candidate
         assert candidate is not None
+        if candidate in self.state.called_candidates:
+            return self._fail(f"candidate already called in this campaign: {candidate}")
 
         result: CallResult = self.call_port.place_call(candidate, pitch)
         self.state.calls_placed += 1
+        self.state.called_candidates.append(candidate)
         self.state.last_call = result
         self.budget.record(result.amount_cents, f"call:{candidate}")
 
         n = self.state.calls_placed
         self.deps.artifacts.write_json(f"calls/call_{n}_result.json", result)
-        self._publish_evidence(
+        call_key = self._current_call_key()
+        self.deps.artifacts.write_text(f"calls/{call_key}/pitch.md", pitch)
+        self.deps.artifacts.write_text(f"calls/{call_key}/transcript.txt", result.transcript)
+        self.deps.artifacts.write_json(
+            f"calls/{call_key}/provider_receipt.json", result.receipt
+        )
+        self.state.last_call_evidence = self._publish_evidence(
             kind="call",
             claim="call",
             value={"status": result.status, "code": result.code, "missing": result.missing_claims},
@@ -473,12 +601,22 @@ class Orchestrator:
             source_ref=result.provider_ref,
             event_type=EventType.CALL_PLACED,
         )
+        self.deps.artifacts.write_json(
+            f"calls/{call_key}/summary.json",
+            {
+                "call_number": n,
+                "candidate_id": candidate,
+                "status": result.status,
+                "code": result.code,
+                "missing_claims": result.missing_claims,
+                "amount_cents": result.amount_cents,
+                "provider_ref": result.provider_ref,
+                "call_evidence_id": self.state.last_call_evidence.evidence_id,
+                "strategy_version": self.state.strategy_version,
+            },
+        )
         if self.budget.over_budget():
             return self._fail("budget exceeded after paid call")
-
-        # Outcome is driven by the rubric result, not by which call this was.
-        if result.status == "booked":
-            return State.FINALIZE
         return State.DIAGNOSE
 
     # -- terminal ---------------------------------------------------------- #
@@ -549,6 +687,31 @@ class Orchestrator:
                 out.append(ev)
         return out
 
+    def _next_call_key(self) -> str:
+        return f"call-{self.state.calls_placed + 1:03d}"
+
+    def _current_call_key(self) -> str:
+        return f"call-{self.state.calls_placed:03d}"
+
+    def _write_strategy(self) -> None:
+        receipt = StrategyReceipt(
+            run_id=self.spec.run_id,
+            version=self.state.strategy_version,
+            tactics=list(self.state.strategy_tactics),
+            based_on_reflection_ids=list(self.state.reflection_ids),
+            occurred_at=datetime.now(timezone.utc),
+        )
+        path = f"strategy/v{self.state.strategy_version:03d}.json"
+        self.deps.artifacts.write_json(path, receipt)
+        self._emit(
+            EventType.STRATEGY_UPDATED,
+            {
+                "version": self.state.strategy_version,
+                "tactics": list(self.state.strategy_tactics),
+                "artifact_refs": [path],
+            },
+        )
+
     def _build_author_request(self) -> AuthorRequest:
         manifest = dict(CANONICAL_MANIFEST)
         failed_search = self.deps.artifacts.path_for("zero/search_fact_b.json")
@@ -600,8 +763,45 @@ class Orchestrator:
         }
         cid = self.deps.evidence.publish_raw(str(event_type), payload)
         evidence = self.deps.evidence.wait_for_evidence(cid)
-        self._emit(event_type, {"evidence_id": evidence.evidence_id, "claim": claim, "kind": kind})
+        event_payload: dict[str, Any] = {
+            "evidence_id": evidence.evidence_id,
+            "claim": claim,
+            "kind": kind,
+            "candidate_id": candidate_id,
+        }
+        if kind == "call":
+            event_payload.update(
+                {"status": value.get("status"), "code": value.get("code")}
+            )
+        elif kind == "policy":
+            event_payload.update(
+                {
+                    "allowed": policy_decision == "allow",
+                    "policy_decision": policy_decision,
+                }
+            )
+        self._emit(event_type, event_payload)
         return evidence
 
     def _emit(self, event_type: EventType, payload: dict[str, Any]) -> None:
         self.deps.artifacts.append_event({"type": str(event_type), **payload})
+        self._action_counter += 1
+        evidence_ids = list(payload.get("evidence_ids", []))
+        if payload.get("evidence_id"):
+            evidence_ids.append(str(payload["evidence_id"]))
+        receipt = ActionReceipt(
+            action_id=f"action-{self._action_counter:04d}",
+            run_id=self.spec.run_id,
+            action=str(event_type),
+            status="failed" if event_type == EventType.ERROR else "completed",
+            candidate_id=payload.get("candidate_id", self.state.current_candidate),
+            evidence_ids=list(dict.fromkeys(evidence_ids)),
+            artifact_refs=list(payload.get("artifact_refs", [])),
+            provider_ref=payload.get("provider_ref"),
+            amount_cents=payload.get("amount_cents"),
+            details=payload,
+            occurred_at=datetime.now(timezone.utc),
+        )
+        self.deps.artifacts.append_jsonl(
+            "actions.jsonl", receipt.model_dump(mode="json")
+        )
