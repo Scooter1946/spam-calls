@@ -124,6 +124,14 @@ def _find_evidence_id(value: Any) -> str | None:
             candidate = value.get(key)
             if isinstance(candidate, str) and candidate.strip():
                 return candidate.strip()
+        # P1's Diagnosis model serializes call evidence first, followed by fact
+        # evidence, under ``evidence_ids``. The first non-empty ID is therefore
+        # the failed-call evidence that must be cited in the PR body.
+        evidence_ids = value.get("evidence_ids")
+        if isinstance(evidence_ids, list):
+            for candidate in evidence_ids:
+                if isinstance(candidate, str) and candidate.strip():
+                    return candidate.strip()
         for nested in value.values():
             found = _find_evidence_id(nested)
             if found:
@@ -411,6 +419,10 @@ class GitHubRepoPort:
             raise
 
     def merge(self, pr: PullRequest) -> MergeResult:
+        repository = ""
+        merge_stdout = ""
+        gh_view: dict[str, Any] = {}
+        sync_outputs: dict[str, str] = {}
         try:
             if pr.branch != self.branch_name:
                 raise RepoValidationError("refusing to merge a PR from an unconstrained branch")
@@ -445,6 +457,21 @@ class GitHubRepoPort:
             merge_commit = gh_view.get("mergeCommit") or {}
             merge_sha = merge_commit.get("oid") if isinstance(merge_commit, dict) else None
             merged = gh_view.get("state") == "MERGED" and bool(gh_view.get("mergedAt"))
+            if merged:
+                if not isinstance(merge_sha, str) or not merge_sha:
+                    raise RepoValidationError("merged PR response did not include a merge commit SHA")
+                # ``gh pr merge --delete-branch`` deletes the agent branch. Make
+                # the merged base branch explicit before ToolRegistry.reload(),
+                # and prove that the reported merge commit is in the checkout.
+                sync_outputs["fetch"] = self._run(["git", "fetch", "origin", "main"])
+                sync_outputs["switch"] = self._run(["git", "switch", "main"])
+                sync_outputs["fast_forward"] = self._run(
+                    ["git", "merge", "--ff-only", "origin/main"]
+                )
+                sync_outputs["verify_merge"] = self._run(
+                    ["git", "merge-base", "--is-ancestor", merge_sha, "HEAD"]
+                )
+                self._validate_physical_files(sorted(ALLOWED_GENERATED_PATHS))
             result = MergeResult(
                 merged=merged,
                 merge_sha=merge_sha,
@@ -458,6 +485,9 @@ class GitHubRepoPort:
                     "adapter_mode": "live",
                     "repository": repository,
                     "merge_stdout": _redact_command_text(merge_stdout),
+                    "local_sync_outputs": {
+                        key: _redact_command_text(value) for key, value in sync_outputs.items()
+                    },
                     "gh_view": gh_view,
                     "merge": _model_payload(result),
                 },
@@ -472,6 +502,12 @@ class GitHubRepoPort:
                     "adapter_mode": "live",
                     "status": "failed",
                     "pull_request_number": pr.number,
+                    "repository": repository,
+                    "merge_stdout": _redact_command_text(merge_stdout),
+                    "local_sync_outputs": {
+                        key: _redact_command_text(value) for key, value in sync_outputs.items()
+                    },
+                    "gh_view": gh_view,
                     "error_type": type(exc).__name__,
                     "error": _redact_command_text(str(exc)),
                 },
@@ -512,7 +548,18 @@ class GitHubRepoPort:
     def _require_conformance(self) -> tuple[Path, dict[str, Any]]:
         path = self._run_dir / "tools/conformance_result.json"
         payload = _read_json_object(path, "generated-tool conformance result")
-        if payload.get("passed") is not True:
+        signals: list[bool] = []
+        if "passed" in payload:
+            passed = payload["passed"]
+            if not isinstance(passed, bool):
+                raise RepoValidationError(f"conformance passed field must be boolean: {path}")
+            signals.append(passed)
+        if "exit_code" in payload:
+            exit_code = payload["exit_code"]
+            if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+                raise RepoValidationError(f"conformance exit_code field must be an integer: {path}")
+            signals.append(exit_code == 0)
+        if not signals or not all(signals):
             raise RepoValidationError(f"generated-tool conformance did not pass: {path}")
         return path, payload
 

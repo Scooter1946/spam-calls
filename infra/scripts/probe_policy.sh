@@ -2,10 +2,13 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
-env_file="${repo_root}/infra/pomerium/.env"
+env_file="${PITCHLOOP_ENV_FILE:-${repo_root}/infra/pomerium/.env}"
+if [[ "${env_file}" != /* ]]; then
+  env_file="${repo_root}/${env_file}"
+fi
 
 if [[ ! -f "${env_file}" ]]; then
-  echo "ERROR missing infra/pomerium/.env" >&2
+  echo "ERROR environment file not found; set PITCHLOOP_ENV_FILE or create infra/pomerium/.env" >&2
   exit 1
 fi
 

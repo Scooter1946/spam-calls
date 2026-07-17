@@ -4,7 +4,9 @@ This stack uses a Pomerium Zero-managed Core data plane. Pomerium service
 accounts are a Zero/Enterprise capability, so the route policies live in the
 Zero control plane while the upstream and data plane run locally.
 
-1. Copy `.env.example` to `.env` and set the Zero bootstrap token.
+1. Copy `.env.example` to `.env` and set the Zero bootstrap token. To reuse a
+   root project environment file instead, set `PITCHLOOP_ENV_FILE=.env` when
+   invoking both scripts; relative paths resolve from the repository root.
 2. Create one Zero service account whose user ID is `pitchloop-agent`. Store
    its JWT only in the local `.env` as `POMERIUM_SERVICE_ACCOUNT_TOKEN`.
 3. Create both routes in `route-blueprint.yaml` in the same cluster. Both point
@@ -16,6 +18,13 @@ Zero control plane while the upstream and data plane run locally.
    ```bash
    bash infra/scripts/start_policy_stack.sh
    bash infra/scripts/probe_policy.sh
+   ```
+
+   Or, with a single root environment file:
+
+   ```bash
+   PITCHLOOP_ENV_FILE=.env bash infra/scripts/start_policy_stack.sh
+   PITCHLOOP_ENV_FILE=.env bash infra/scripts/probe_policy.sh
    ```
 
 The policy target publishes no host port and performs no consent check. A 403

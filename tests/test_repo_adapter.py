@@ -148,6 +148,44 @@ def test_rejects_failed_conformance_before_any_command(tmp_path: Path) -> None:
     assert failure["error_type"] == "RepoValidationError"
 
 
+def test_accepts_p1_conformance_and_diagnosis_artifact_shapes(tmp_path: Path) -> None:
+    runner = RecordingRunner()
+    port, _, run_dir = _live_port(tmp_path, runner)
+    _write_json(
+        run_dir / "tools/conformance_result.json",
+        {"exit_code": 0, "output": "1 passed", "command": "pytest -q conformance"},
+    )
+    _write_json(
+        run_dir / "evidence/diagnosis.json",
+        {
+            "present_claims": ["fact_a"],
+            "missing_claims": ["fact_b"],
+            "evidence_ids": ["ev-call-001", "ev-fact-a-001"],
+            "next_action": "discover_capability",
+        },
+    )
+
+    pr = port.create_agent_pr(sorted(ALLOWED_GENERATED_PATHS), "ignored", "ignored")
+
+    assert pr.number == 42
+    create = next(call for call in runner.calls if call[:3] == ["gh", "pr", "create"])
+    body = create[create.index("--body") + 1]
+    assert "Failed-call evidence ID: ev-call-001" in body
+    artifact = json.loads((run_dir / "repo/pr.json").read_text())
+    assert artifact["inputs"]["conformance"]["exit_code"] == 0
+    assert artifact["inputs"]["failed_call_evidence_id"] == "ev-call-001"
+
+
+def test_rejects_conflicting_conformance_signals(tmp_path: Path) -> None:
+    runner = RecordingRunner()
+    port, _, run_dir = _live_port(tmp_path, runner)
+    _write_json(run_dir / "tools/conformance_result.json", {"passed": True, "exit_code": 1})
+
+    with pytest.raises(RepoValidationError, match="conformance did not pass"):
+        port.create_agent_pr(sorted(ALLOWED_GENERATED_PATHS), "ignored", "ignored")
+    assert runner.calls == []
+
+
 def test_rejects_extra_modified_worktree_file(tmp_path: Path) -> None:
     runner = RecordingRunner(extra_status_path="README.md")
     port, _, _ = _live_port(tmp_path, runner)
@@ -217,6 +255,16 @@ def test_parses_merge_json_and_writes_artifact(tmp_path: Path) -> None:
     assert result.merge_sha == "a" * 40
     artifact = json.loads((run_dir / "repo/merge.json").read_text())
     assert artifact["gh_view"]["state"] == "MERGED"
+    assert set(artifact["local_sync_outputs"]) == {
+        "fetch",
+        "switch",
+        "fast_forward",
+        "verify_merge",
+    }
+    assert ["git", "fetch", "origin", "main"] in runner.calls
+    assert ["git", "switch", "main"] in runner.calls
+    assert ["git", "merge", "--ff-only", "origin/main"] in runner.calls
+    assert ["git", "merge-base", "--is-ancestor", "a" * 40, "HEAD"] in runner.calls
 
 
 def test_fake_create_and_merge_are_deterministic(tmp_path: Path) -> None:

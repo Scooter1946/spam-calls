@@ -3,7 +3,10 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 compose_file="${repo_root}/infra/pomerium/docker-compose.yml"
-env_file="${repo_root}/infra/pomerium/.env"
+env_file="${PITCHLOOP_ENV_FILE:-${repo_root}/infra/pomerium/.env}"
+if [[ "${env_file}" != /* ]]; then
+  env_file="${repo_root}/${env_file}"
+fi
 
 if ! command -v docker >/dev/null 2>&1; then
   echo "ERROR docker is required to run the Pomerium data plane" >&2
@@ -11,7 +14,7 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 if [[ ! -f "${env_file}" ]]; then
-  echo "ERROR copy infra/pomerium/.env.example to infra/pomerium/.env and fill the required values" >&2
+  echo "ERROR environment file not found; set PITCHLOOP_ENV_FILE or create infra/pomerium/.env" >&2
   exit 1
 fi
 

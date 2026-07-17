@@ -106,6 +106,27 @@ def _write_json_artifact(artifacts: Any, relative_path: str, payload: dict[str, 
     return str(path)
 
 
+def _write_live_policy_artifacts(
+    artifacts: Any,
+    relative_path: str,
+    payload: dict[str, Any],
+) -> str:
+    """Preserve provider proof even if the orchestrator normalizes its path.
+
+    P1 writes the canonical ``policy/deny.json`` or ``policy/allow.json`` after
+    this adapter returns. Keep the full request/response observation in a
+    sibling ``*.raw.json`` file and return that immutable proof path, while also
+    writing the canonical path for standalone adapter use.
+    """
+
+    path = Path(relative_path)
+    raw_name = f"{path.stem}.raw{path.suffix}" if path.suffix else f"{path.name}.raw.json"
+    raw_relative_path = str(path.with_name(raw_name))
+    raw_artifact_path = _write_json_artifact(artifacts, raw_relative_path, payload)
+    _write_json_artifact(artifacts, relative_path, payload)
+    return raw_artifact_path
+
+
 def _authorization_value(token: str) -> str:
     token = token.strip()
     if not token:
@@ -331,7 +352,7 @@ class PomeriumPolicyPort:
                 "reason": reason,
             },
         }
-        artifact_path = _write_json_artifact(
+        artifact_path = _write_live_policy_artifacts(
             self._artifacts,
             relative_path,
             _redact(artifact, secrets),
@@ -381,7 +402,7 @@ class PomeriumPolicyPort:
                 "reason": reason,
             },
         }
-        artifact_path = _write_json_artifact(
+        artifact_path = _write_live_policy_artifacts(
             self._artifacts,
             relative_path,
             _redact(artifact, secrets),

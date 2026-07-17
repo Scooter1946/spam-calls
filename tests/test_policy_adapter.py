@@ -129,21 +129,36 @@ def test_live_policy_parses_realistic_deny_and_allow_with_same_identity(tmp_path
         "consent_verified",
         "req-allow",
     )
+    assert Path(denied.raw_artifact_path) == tmp_path / "policy/deny.raw.json"
+    assert Path(allowed.raw_artifact_path) == tmp_path / "policy/allow.raw.json"
     assert recorder.requests[0]["headers"]["Authorization"] == recorder.requests[1]["headers"][
         "Authorization"
     ]
     assert recorder.requests[0]["headers"]["Authorization"] == f"Bearer Pomerium-{token}"
     assert all(kwargs["follow_redirects"] is False for kwargs in recorder.client_kwargs)
 
-    combined_artifacts = (tmp_path / "policy/deny.json").read_text() + (
-        tmp_path / "policy/allow.json"
-    ).read_text()
+    combined_artifacts = "".join(
+        (tmp_path / relative_path).read_text()
+        for relative_path in (
+            "policy/deny.json",
+            "policy/deny.raw.json",
+            "policy/allow.json",
+            "policy/allow.raw.json",
+        )
+    )
     assert token not in combined_artifacts
     assert "Authorization" not in combined_artifacts
     assert "set-cookie" not in combined_artifacts
     assert json.loads((tmp_path / "policy/allow.json").read_text())["response"][
         "upstream_reached"
     ] is True
+
+    # P1 normalizes the canonical path after authorize() returns. The provider
+    # request/response proof must remain available at raw_artifact_path.
+    (tmp_path / "policy/allow.json").write_text('{"allowed": true}\n', encoding="utf-8")
+    raw_allow = json.loads(Path(allowed.raw_artifact_path).read_text())
+    assert raw_allow["response"]["upstream_reached"] is True
+    assert raw_allow["response"]["headers"]["x-request-id"] == "req-allow"
 
 
 def test_redirect_is_not_followed_or_mistaken_for_authorization(tmp_path: Path) -> None:
@@ -180,8 +195,10 @@ def test_missing_live_configuration_is_a_structured_failure(tmp_path: Path) -> N
     assert decision.allowed is False
     assert decision.status_code == 0
     assert decision.reason == "policy_config_error"
+    assert Path(decision.raw_artifact_path) == tmp_path / "policy/deny.raw.json"
     payload = json.loads((tmp_path / "policy/deny.json").read_text())
     assert payload["failure"]["type"] == "policy_config_error"
+    assert json.loads((tmp_path / "policy/deny.raw.json").read_text()) == payload
 
 
 def test_factory_defaults_to_fake_and_rejects_unknown_mode(tmp_path: Path) -> None:
