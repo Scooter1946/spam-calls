@@ -207,6 +207,8 @@ def test_live_mode_never_falls_back_on_ingress_failure(tmp_path):
         port.publish_raw("policy.decision", policy_event())
     assert attempts == 2
     assert not list(tmp_path.glob("*_normalized.json"))
+    failure = json.loads(next(tmp_path.glob("*_failure.json")).read_text())
+    assert failure["code"] == "nexla_ingress_failed"
 
 
 def test_live_poll_timeout_is_structured(tmp_path):

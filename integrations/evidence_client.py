@@ -236,7 +236,9 @@ class NexlaEvidencePort:
     def _get_flow(flow_id: str) -> Any:
         from nexla_sdk import NexlaClient
 
-        return NexlaClient().flows.get(flow_id=flow_id)
+        return NexlaClient().flows.get(
+            flow_id=int(flow_id) if flow_id.isdigit() else flow_id
+        )
 
     def _validate_flow(self) -> None:
         if self._flow_validated:
@@ -268,12 +270,33 @@ class NexlaEvidencePort:
                 response = self.client.post(self.ingress_url, json=raw)
                 if response.status_code < 500:
                     break
-            except httpx.TransportError:
+            except httpx.TransportError as exc:
                 if attempt:
+                    _write(
+                        self.artifact_root,
+                        f"{correlation_id}_failure.json",
+                        {
+                            "code": "nexla_ingress_failed",
+                            "correlation_id": correlation_id,
+                            "error": str(exc),
+                        },
+                    )
                     raise
         if response is None:
             raise RuntimeError("Nexla ingress did not return a response")
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            _write(
+                self.artifact_root,
+                f"{correlation_id}_failure.json",
+                {
+                    "code": "nexla_ingress_failed",
+                    "correlation_id": correlation_id,
+                    "status_code": response.status_code,
+                },
+            )
+            raise
         return correlation_id
 
     def wait_for_evidence(
