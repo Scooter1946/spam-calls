@@ -35,10 +35,13 @@ def load_spec(path: str) -> RunSpec:
 def build_config() -> Config:
     return Config(
         fact_a_capability=os.environ.get(
-            "ZERO_FACT_A_CAPABILITY", "company enrichment for sales personalization"
+            "ZERO_FACT_A_CAPABILITY", "research a local business and its current website"
         ),
         fact_b_capability=os.environ.get(
-            "ZERO_FACT_B_CAPABILITY", "northstar api v1 migration deadline"
+            "ZERO_FACT_B_CAPABILITY", "audit a small-business website for lost customer inquiries"
+        ),
+        prospect_capability=os.environ.get(
+            "ZERO_PROSPECT_CAPABILITY", "find local small businesses that may need a new website"
         ),
         fixture_url=os.environ.get("FACT_B_FIXTURE_URL", "http://127.0.0.1:8088"),
         conformance_command=os.environ.get(

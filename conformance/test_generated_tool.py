@@ -22,6 +22,7 @@ from pydantic import BaseModel
 _HERE = Path(__file__).resolve().parent
 _EXPECTED = json.loads((_HERE / "expected_fact_b.json").read_text(encoding="utf-8"))
 _EXPECTED_STATEMENT = _EXPECTED["value"]["statement"]
+_EXPECTED_PHRASE = "website is losing customer inquiries"
 _EXPECTED_ENTRYPOINT = "generated_tools.fact_b_tool:run"
 
 
@@ -103,19 +104,17 @@ def fixture_server() -> Iterator[tuple[str, _FixtureState]]:
             state.requests.append(self.path)
             parsed = urlparse(self.path)
             candidate = parse_qs(parsed.query).get("candidate_id", [""])[0]
-            expected_path = "/companies/northstar_systems/migration-signal"
+            expected_path = "/businesses/website-opportunity"
             if parsed.path != expected_path or candidate != _EXPECTED["candidate_id"]:
-                body = json.dumps({"detail": "migration signal not found"}).encode()
+                body = json.dumps({"detail": "website opportunity not found"}).encode()
                 self.send_response(404)
             else:
                 body = json.dumps(
                     {
                         "candidate_id": candidate,
-                        "company_id": "northstar_systems",
                         "claim": "fact_b",
                         "statement": _EXPECTED_STATEMENT,
                         "source": _EXPECTED["source"],
-                        "published_at": "2026-07-17T12:00:00-07:00",
                     }
                 ).encode()
                 self.send_response(200)
@@ -163,7 +162,7 @@ def test_exact_canonical_files_and_one_manifest(generated_dir: Path) -> None:
 
 def test_manifest_matches_frozen_contract(generated_dir: Path) -> None:
     _, manifest = _read_manifest(generated_dir)
-    assert manifest.name == "generated_fact_b_tool"
+    assert manifest.name == "website_opportunity_audit"
     assert manifest.capability == "fact_b"
     assert manifest.output_claim == "fact_b"
     assert manifest.entrypoint == _EXPECTED_ENTRYPOINT
@@ -191,13 +190,12 @@ def test_allowed_candidate_fetches_canonical_evidence(
     assert result.get("candidate_id") == _EXPECTED["candidate_id"]
     assert result.get("claim") == "fact_b"
     assert result.get("value") == _EXPECTED["value"]
+    assert _EXPECTED_PHRASE in result["value"]["statement"]
     assert result.get("source") == _EXPECTED["source"]
     provenance = result.get("provenance")
     assert isinstance(provenance, dict) and provenance.get("url")
     assert len(state.requests) == before + 1, "implementation did not fetch the fixture"
-    assert state.requests[-1].startswith(
-        "/companies/northstar_systems/migration-signal?"
-    )
+    assert state.requests[-1].startswith("/businesses/website-opportunity?")
 
 
 def test_unknown_candidate_does_not_receive_fact_b(

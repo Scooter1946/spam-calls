@@ -8,44 +8,45 @@ from dataclasses import dataclass
 
 
 REJECTED_MISSING_FACT_A_RESPONSE = (
-    "That is too generic and does not show that you understand what is relevant "
-    "to us. I am not taking the meeting."
+    "Uh, honestly, this still feels pretty generic. I don't think you know enough "
+    "about our business yet, so I'm going to pass."
 )
 REJECTED_MISSING_FACT_B_RESPONSE = (
-    "That first point is relevant, but you have not shown that you understand our "
-    "August 30 API v1 migration deadline. I am not taking the meeting."
+    "Mm, okay, but you haven't actually looked at our website, have you? "
+    "I think I'm going to pass for now."
 )
 MEETING_BOOKED_RESPONSE = (
-    "Yes, that is relevant to what we are doing. Send me a 20-minute invite for "
+    "Yeah, okay, that actually sounds useful. Send me a 20-minute invite for "
     "Tuesday at 2 PM."
 )
 REJECTED_WEAK_VALUE_RESPONSE = (
-    "The timing detail is useful, but I still do not understand the business impact. "
-    "I am not taking the meeting."
+    "I hear you, but I'm still not sure what that changes for the business. "
+    "Let me think about it and, uh, don't book anything yet."
 )
 REJECTED_NO_PROOF_RESPONSE = (
-    "The value sounds relevant, but I need a concrete example before spending time on it. "
-    "I am not taking the meeting."
+    "Maybe, but can you show me something you've actually done for a business like ours? "
+    "Without that, I'm not ready to take a meeting."
 )
 REJECTED_HIGH_FRICTION_RESPONSE = (
-    "This sounds like too much operational change for us right now. I am not taking the meeting."
+    "Oof, that sounds like a whole project, and we're already stretched thin. "
+    "I can't take that on right now."
 )
 REJECTED_TIMING_RESPONSE = (
-    "The approach makes sense, but I cannot justify a broad evaluation this quarter. "
-    "I am not taking the meeting."
+    "Yeah, the idea makes sense, but the timing is rough. "
+    "I can't justify a big website project this month."
 )
 
 BUSINESS_IMPACT_TACTIC = (
-    "Protect release dates."
+    "Turn more local searches into calls and bookings."
 )
 PROOF_TACTIC = (
-    "I can show a comparable report."
+    "I can show a before-and-after from a similar local business."
 )
 LOW_FRICTION_TACTIC = (
-    "Start with one endpoint."
+    "Start with a fixed-price homepage and contact-flow refresh."
 )
 PILOT_TACTIC = (
-    "Let's define one safe pilot."
+    "Let's scope one page together before you commit to a rebuild."
 )
 
 
@@ -120,18 +121,18 @@ def evaluate_campaign_pitch(
         return base
 
     requirements = {
-        "jordan_lee": (
+        "samir_patel": (
             BUSINESS_IMPACT_TACTIC,
             "REJECTED_WEAK_VALUE",
             REJECTED_WEAK_VALUE_RESPONSE,
         ),
-        "priya_shah": (PROOF_TACTIC, "REJECTED_NO_PROOF", REJECTED_NO_PROOF_RESPONSE),
-        "luis_martinez": (
+        "carla_mendez": (PROOF_TACTIC, "REJECTED_NO_PROOF", REJECTED_NO_PROOF_RESPONSE),
+        "ben_carter": (
             LOW_FRICTION_TACTIC,
             "REJECTED_HIGH_FRICTION",
             REJECTED_HIGH_FRICTION_RESPONSE,
         ),
-        "amina_okafor": (PILOT_TACTIC, "REJECTED_TIMING", REJECTED_TIMING_RESPONSE),
+        "tasha_green": (PILOT_TACTIC, "REJECTED_TIMING", REJECTED_TIMING_RESPONSE),
     }
     requirement = requirements.get(candidate_id)
     if requirement and not _contains_normalized(pitch_text, requirement[0]):
@@ -142,3 +143,52 @@ def evaluate_campaign_pitch(
             response=requirement[2],
         )
     return base
+
+
+def render_conversation(candidate_id: str, pitch_text: str, result: RubricResult) -> str:
+    """Render a deterministic but human-sounding, multi-turn demo transcript."""
+
+    name = candidate_id.split("_", 1)[0].title()
+    exchanges = {
+        "REJECTED_MISSING_FACT_B": [
+            f"{name.upper()}: Hi—yeah, I've got a minute. What's this about?",
+            f"AGENT: {pitch_text}",
+            f"{name.upper()}: Okay… so what, specifically, would you change on our site?",
+            "AGENT: I'd start by looking at where visitors drop off and which contact path is hardest to use.",
+        ],
+        "REJECTED_WEAK_VALUE": [
+            f"{name.upper()}: Hey. I've got, uh, maybe two minutes.",
+            f"AGENT: {pitch_text}",
+            f"{name.upper()}: Right, but is this mostly a design thing?",
+            "AGENT: The design supports it, but the goal is getting more qualified customers to contact you.",
+        ],
+        "REJECTED_NO_PROOF": [
+            f"{name.upper()}: Hi, this is {name}.",
+            f"AGENT: {pitch_text}",
+            f"{name.upper()}: Hmm. We get calls like this a lot. Do you have relevant work I can see?",
+            "AGENT: I can walk you through the opportunity report and the changes we'd prioritize.",
+        ],
+        "REJECTED_HIGH_FRICTION": [
+            f"{name.upper()}: Yeah, go ahead.",
+            f"AGENT: {pitch_text}",
+            f"{name.upper()}: Wait—are you talking about replacing the whole website?",
+            "AGENT: Not necessarily. We'd keep what works and focus on the path that produces inquiries.",
+        ],
+        "REJECTED_TIMING": [
+            f"{name.upper()}: Hi. Sorry, it's a little noisy here—what can I do for you?",
+            f"AGENT: {pitch_text}",
+            f"{name.upper()}: I like the idea. I'm just worried this turns into a six-week thing.",
+            "AGENT: We can keep the first step small and decide on a rebuild only after you see the scope.",
+        ],
+        "MEETING_BOOKED": [
+            f"{name.upper()}: Hello?",
+            f"AGENT: {pitch_text}",
+            f"{name.upper()}: Okay, that's… surprisingly specific. What's the commitment for the first conversation?",
+            "AGENT: Twenty minutes. I'll show the research, the highest-impact page, and a fixed first step—no prep needed.",
+            f"{name.upper()}: And you'll send the examples beforehand?",
+            "AGENT: Absolutely. I'll include the audit and the comparable before-and-after.",
+        ],
+    }
+    lines = exchanges.get(result.code, [f"AGENT: {pitch_text}"])
+    lines.append(f"{name.upper()}: {result.response}")
+    return "\n".join(lines) + "\n"

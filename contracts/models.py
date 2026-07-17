@@ -26,6 +26,7 @@ class RunSpec(BaseModel):
     required_claims: list[Literal["fact_a", "fact_b"]]
     max_paid_calls: int = 2
     objective: str | None = None
+    candidate_profiles: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class Evidence(BaseModel):

@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 
 _FORBIDDEN_INTERNAL_TERMS = ("zero.xyz", "pomerium", "nexla", "hackathon")
-_MAX_WORDS = 69
+_MAX_WORDS = 120
 
 
 def _field(item: Any, name: str, default: Any = None) -> Any:
@@ -102,8 +102,10 @@ def render_pitch(
         claim="fact_b",
     )
 
-    first_name = candidate_id.split("_", 1)[0].replace("-", " ").title()
-    sentences = [f"Hi {first_name}, I'm calling from {product}."]
+    profiles = _field(spec, "candidate_profiles", {})
+    profile = profiles.get(candidate_id, {}) if isinstance(profiles, dict) else {}
+    first_name = str(profile.get("name") or candidate_id).split()[0].replace("-", " ").title()
+    sentences = [f"Hi {first_name}, I'm calling from {product}. I'll be brief."]
     if fact_a:
         sentences.append(f"I noticed {fact_a}.")
     if fact_b:
@@ -111,8 +113,8 @@ def render_pitch(
     sentences.extend(strategy_tactics or [])
     sentences.extend(
         [
-            "We generate API migration contract tests and rollout checklists to reduce migration risk.",
-            "Would a 20-minute conversation Tuesday be useful?",
+            "We build practical websites that turn more local visitors into calls and bookings.",
+            "Would it be unreasonable to review the research together for 20 minutes Tuesday?",
         ]
     )
     pitch = " ".join(sentences)

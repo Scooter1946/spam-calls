@@ -1,23 +1,21 @@
 {
   "run_id": "demo-001",
   "goal": "book_one_qualified_meeting",
-  "objective": "Learn across Northstar engineering leaders and book one qualified MigrationGuard meeting",
-  "product": "MigrationGuard",
-  "persona": "VP Engineering at a B2B software company facing an API migration",
-  "candidates": [
-    "alex_rivera",
-    "maya_chen",
-    "jordan_lee",
-    "priya_shah",
-    "luis_martinez",
-    "amina_okafor",
-    "theo_williams"
-  ],
+  "objective": "Find and research local small businesses, learn from each owner conversation, and book one qualified website consultation",
+  "product": "SiteSpring",
+  "persona": "Owner or manager of a local small business with an underperforming website",
+  "candidates": ["alex_rivera", "nina_park", "samir_patel", "carla_mendez", "ben_carter", "tasha_green", "derek_wu"],
+  "candidate_profiles": {
+    "alex_rivera": {"name": "Alex Rivera", "business": "Willow & Co Bakery", "title": "Owner", "location": "Portland, OR"},
+    "nina_park": {"name": "Nina Park", "business": "Oak & Ember Bakery", "title": "Owner", "location": "Tacoma, WA"},
+    "samir_patel": {"name": "Samir Patel", "business": "Harbor Light Plumbing", "title": "General Manager", "location": "Everett, WA"},
+    "carla_mendez": {"name": "Carla Mendez", "business": "Mendez Family Dental", "title": "Practice Owner", "location": "Renton, WA"},
+    "ben_carter": {"name": "Ben Carter", "business": "Riverbend Landscaping", "title": "Owner", "location": "Vancouver, WA"},
+    "tasha_green": {"name": "Tasha Green", "business": "Cedar Lane Florist", "title": "Owner", "location": "Bellevue, WA"},
+    "derek_wu": {"name": "Derek Wu", "business": "Northline Auto Repair", "title": "Owner", "location": "Shoreline, WA"}
+  },
   "budget_cents": 5000,
   "policy_ref": "pomerium://pitchloop/demo-v1",
-  "required_claims": [
-    "fact_a",
-    "fact_b"
-  ],
+  "required_claims": ["fact_a", "fact_b"],
   "max_paid_calls": 6
 }

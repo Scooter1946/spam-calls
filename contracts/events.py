@@ -28,6 +28,8 @@ class EventType(str, Enum):
     CALL_PLACED = "call_placed"
     DIAGNOSIS = "diagnosis"
     ZERO_SEARCH = "zero_search"
+    PROSPECTS_DISCOVERED = "prospects_discovered"
+    TOOL_NEED_EVALUATED = "tool_need_evaluated"
     TOOL_AUTHORED = "tool_authored"
     TOOL_CONFORMANCE = "tool_conformance"
     PR_OPENED = "pr_opened"

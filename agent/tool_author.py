@@ -1,4 +1,4 @@
-"""Tool-authoring adapter: asks a coding model to write the missing Fact B tool.
+"""Tool-authoring adapter: asks a coding model to write the missing website-audit tool.
 
 Modes
 -----
@@ -37,7 +37,7 @@ TOOL_TEST_FILE = "test_fact_b_tool.py"
 
 # Canonical generated-tool manifest (§9). ``version`` may be bumped on repair.
 CANONICAL_MANIFEST: dict[str, Any] = {
-    "name": "generated_fact_b_tool",
+    "name": "website_opportunity_audit",
     "capability": "fact_b",
     "entrypoint": "generated_tools.fact_b_tool:run",
     "input_schema": {"candidate_id": "string"},
@@ -174,8 +174,8 @@ def build_prompt(request: AuthorRequest, *, repair_output: str | None = None) ->
     parts = [
         "You are generating exactly one tool for the PitchLoop agent.",
         "",
-        "GOAL: implement a tool that retrieves the Fact B public-company signal for a",
-        "candidate and returns it as a canonical evidence payload for claim `fact_b`.",
+        "GOAL: implement a tool that audits a small business's public website opportunity",
+        "and returns it as a canonical evidence payload for internal claim `fact_b`.",
         "",
         "YOU MAY CREATE OR MODIFY ONLY THESE THREE FILES (relative paths):",
         *(f"  - {p}" for p in request.allowed_paths),
@@ -191,7 +191,7 @@ def build_prompt(request: AuthorRequest, *, repair_output: str | None = None) ->
         "FIXTURE RESPONSE SCHEMA:",
         json.dumps(request.response_schema, indent=2, sort_keys=True),
         "",
-        "The prior Zero capability search for this signal returned NO match:",
+        "The prior Zero marketplace search for this website-audit capability returned NO match:",
         json.dumps(request.failed_zero_search, indent=2, sort_keys=True, default=str),
         "",
         "Unknown candidates MUST NOT receive Fact B (return an explicit error payload).",
@@ -259,7 +259,7 @@ class ToolAuthor:
         tool_dir.mkdir(parents=True, exist_ok=True)
 
         module_src = (
-            '"""Fetch canonical Fact B evidence from the public fixture."""\n'
+            '"""Fetch a canonical website-opportunity audit from the public fixture."""\n'
             "from __future__ import annotations\n\n"
             "import json\n"
             "import os\n"
@@ -271,7 +271,7 @@ class ToolAuthor:
             '    """Return canonical fact_b evidence for the allowed candidate."""\n'
             '    base_url = os.environ.get("FACT_B_FIXTURE_URL", "").rstrip("/")\n'
             "    if base_url:\n"
-            '        url = f"{base_url}/companies/northstar_systems/migration-signal?{urlencode({\'candidate_id\': candidate_id})}"\n'
+            '        url = f"{base_url}/businesses/website-opportunity?{urlencode({\'candidate_id\': candidate_id})}"\n'
             "        try:\n"
             "            with urlopen(url, timeout=2) as response:\n"
             '                payload = json.loads(response.read().decode("utf-8"))\n'
@@ -281,10 +281,11 @@ class ToolAuthor:
             "        # ponytail: file fallback keeps fake mode self-contained; live mode always sets the URL.\n"
             '        fixture = Path("fixtures/public_company_data.json")\n'
             "        try:\n"
-            '            payload = json.loads(fixture.read_text(encoding="utf-8"))["northstar_systems"]["migration_signal"]\n'
+            '            businesses = json.loads(fixture.read_text(encoding="utf-8"))["small_businesses"]\n'
+            '            payload = businesses.get(candidate_id, {}).get("website_opportunity", {})\n'
             "        except (OSError, ValueError, KeyError, TypeError) as exc:\n"
             '            return {"candidate_id": candidate_id, "error": f"fixture read failed: {type(exc).__name__}"}\n'
-            '        if candidate_id not in payload.get("allowed_candidates", []):\n'
+            '        if not payload:\n'
             '            return {"candidate_id": candidate_id, "error": "candidate is not allowed"}\n'
             '        payload = {"candidate_id": candidate_id, **payload}\n'
             "        url = fixture.resolve().as_uri()\n"

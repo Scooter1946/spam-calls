@@ -1,6 +1,6 @@
 # PitchLoop
 
-PitchLoop is a consent-gated sales campaign agent that learns across people and acquires or authors missing evidence tools.
+PitchLoop is a consent-gated small-business website sales agent that researches a queue, learns across owner conversations, and acquires or authors missing research tools.
 
 ## Problem and insight
 
@@ -8,11 +8,11 @@ Most self-improving agents rewrite prompts. PitchLoop records an evidence-backed
 
 ## Deterministic scenario
 
-PitchLoop sells the fictional MigrationGuard product to fictional Northstar Systems. `alex_rivera` is denied by policy and is never called. Each eligible contact is called at most once. Maya exposes a missing deadline signal; later contacts surface value, proof, friction, and timing objections; the accumulated strategy eventually books Theo.
+PitchLoop sells SiteSpring's website-building service to fictional local businesses. Zero.xyz discovers the queue and researches each business. `alex_rivera` is denied by policy and is never called. Each eligible owner is called at most once; Nina exposes a missing website-audit capability, later owners surface value, proof, friction, and timing objections, and the accumulated strategy eventually books Derek.
 
 ## Autonomous loop
 
-Goal → plan → candidate policy/enrichment → one call → normalized diagnosis → reflection receipt → strategy/tool improvement → next uncalled candidate → qualified meeting.
+Goal → Zero prospect discovery → ordered queue → policy → tool assessment → business research → one call → normalized diagnosis → reflection → strategy/tool improvement → next uncalled owner → qualified meeting.
 
 ## Architecture
 
@@ -31,7 +31,7 @@ flowchart LR
 
 ## Why the integrations are causal
 
-- Zero.xyz supplies the paid enrichment and call outcomes; the agent searches its live catalog before authoring a missing tool.
+- Zero.xyz discovers prospects, supplies business research, and places calls; the agent searches its catalog before authoring the missing website-opportunity audit.
 - Pomerium produces a real denial for the non-consenting contact and an allow for the consenting contact. The denial is never bypassed.
 - Nexla is the live normalization and read path used for diagnosis; live mode cannot normalize locally or read raw files.
 
@@ -55,14 +55,14 @@ demo/run_demo.sh
 
 Open `http://127.0.0.1:8000`, enter a natural-language campaign objective, and
 launch the fake/local campaign. The desktop dashboard refreshes while the agent
-works and exposes campaign statistics, every candidate and call, reflections,
-strategy changes, generated tools, evidence, receipts, transcripts, and the
+works and exposes the ordered queue, campaign statistics, every business and call, reflections,
+strategy changes, Zero.xyz and custom tools, evidence, receipts, transcripts, and the
 append-only agent action history. Click a completed call to inspect its full
 record; use the campaign picker to revisit prior runs.
 
 ## Live configuration
 
-Set the environment variables listed in `.env.example`. For Nexla, expose the local sink with ngrok, configure one webhook → transform → REST destination flow, then set `NEXLA_SERVICE_KEY`, `NEXLA_INGRESS_URL`, `NEXLA_FLOW_ID`, and the public `NEXLA_SINK_URL`. Never commit their values.
+Set the environment variables listed in `.env.example`. In live-call mode, every fictional queue entry is routed by Zero.xyz to the same consented teammate number in `CALLEE_PHONE_E164`; candidate IDs choose only the demo persona and evidence. No prospect phone list exists. For Nexla, expose the local sink with ngrok, configure one webhook → transform → REST destination flow, then set `NEXLA_SERVICE_KEY`, `NEXLA_INGRESS_URL`, `NEXLA_FLOW_ID`, and the public `NEXLA_SINK_URL`. Never commit values.
 
 ## Proof artifacts
 
@@ -70,11 +70,11 @@ The integrated fake demo writes each run under `runs/fake-demo.*` or `runs/campa
 
 ## Generated-tool PR
 
-Pending the live autonomous run. The generated tool is restricted to `fact_b` and must pass the fixed conformance suite before merge.
+Pending the live autonomous run. The generated website opportunity audit retains the frozen internal `fact_b` contract and must pass conformance before merge.
 
 ## Limitations and ethics
 
-This hackathon build supports one fictional company, a deterministic desktop campaign, and one generated capability. Live calling remains deliberately limited to one configured callee; the larger cohort is fake/local. It has no arbitrary outreach, calendar integration, or policy bypass. Phone numbers, credentials, and unredacted receipts are excluded from Git.
+This hackathon build supports a fictional local-business cohort, a deterministic desktop campaign, and one generated capability. Live calling is deliberately limited to one configured, consented teammate number even though the queue shows multiple personas. It has no arbitrary outreach, calendar integration, or policy bypass. Phone numbers, credentials, and unredacted receipts are excluded from Git.
 
 ## Team
 

@@ -1,55 +1,16 @@
 {
-  "company": {
-    "id": "northstar_systems",
-    "name": "Northstar Systems",
-    "description": "Fictional B2B API platform company"
-  },
-  "product": {
-    "name": "MigrationGuard",
-    "value_proposition": "Generates API migration contract tests and rollout checklists"
+  "seller": {
+    "company": "SiteSpring",
+    "service": "Conversion-focused websites for small local businesses",
+    "promise": "Make it easier for nearby customers to call, book, request a quote, or visit"
   },
   "contacts": {
-    "alex_rivera": {
-      "name": "Alex Rivera",
-      "title": "CTO",
-      "policy_expected": "deny",
-      "phone_env": null
-    },
-    "maya_chen": {
-      "name": "Maya Chen",
-      "title": "VP Engineering",
-      "policy_expected": "allow",
-      "phone_env": "CALLEE_PHONE_E164"
-    },
-    "jordan_lee": {
-      "name": "Jordan Lee",
-      "title": "Director of Platform Engineering",
-      "policy_expected": "allow",
-      "phone_env": null
-    },
-    "priya_shah": {
-      "name": "Priya Shah",
-      "title": "Head of Developer Experience",
-      "policy_expected": "allow",
-      "phone_env": null
-    },
-    "luis_martinez": {
-      "name": "Luis Martinez",
-      "title": "VP Infrastructure",
-      "policy_expected": "allow",
-      "phone_env": null
-    },
-    "amina_okafor": {
-      "name": "Amina Okafor",
-      "title": "Director of Engineering Operations",
-      "policy_expected": "allow",
-      "phone_env": null
-    },
-    "theo_williams": {
-      "name": "Theo Williams",
-      "title": "SVP Engineering",
-      "policy_expected": "allow",
-      "phone_env": null
-    }
+    "alex_rivera": {"name": "Alex Rivera", "business": "Willow & Co Bakery", "title": "Owner", "policy_expected": "deny"},
+    "nina_park": {"name": "Nina Park", "business": "Oak & Ember Bakery", "title": "Owner", "policy_expected": "allow"},
+    "samir_patel": {"name": "Samir Patel", "business": "Harbor Light Plumbing", "title": "General Manager", "policy_expected": "allow"},
+    "carla_mendez": {"name": "Carla Mendez", "business": "Mendez Family Dental", "title": "Practice Owner", "policy_expected": "allow"},
+    "ben_carter": {"name": "Ben Carter", "business": "Riverbend Landscaping", "title": "Owner", "policy_expected": "allow"},
+    "tasha_green": {"name": "Tasha Green", "business": "Cedar Lane Florist", "title": "Owner", "policy_expected": "allow"},
+    "derek_wu": {"name": "Derek Wu", "business": "Northline Auto Repair", "title": "Owner", "policy_expected": "allow"}
   }
 }

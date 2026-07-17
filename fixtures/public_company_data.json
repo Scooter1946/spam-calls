@@ -1,18 +1,10 @@
 {
-  "northstar_systems": {
-    "migration_signal": {
-      "allowed_candidates": [
-        "maya_chen",
-        "jordan_lee",
-        "priya_shah",
-        "luis_martinez",
-        "amina_okafor",
-        "theo_williams"
-      ],
-      "claim": "fact_b",
-      "statement": "Northstar Systems has an August 30 API v1 migration deadline.",
-      "source": "northstar_public_migration_signal",
-      "published_at": "2026-07-17T12:00:00-07:00"
-    }
+  "small_businesses": {
+    "nina_park": {"website_opportunity": {"claim": "fact_b", "statement": "Oak & Ember Bakery's website is losing customer inquiries because custom orders require a phone call.", "source": "public_website_opportunity_signal"}},
+    "samir_patel": {"website_opportunity": {"claim": "fact_b", "statement": "Harbor Light Plumbing's website is losing customer inquiries because the emergency-call button disappears on service pages.", "source": "public_website_opportunity_signal"}},
+    "carla_mendez": {"website_opportunity": {"claim": "fact_b", "statement": "Mendez Family Dental's website is losing customer inquiries because new-patient forms are buried in the navigation.", "source": "public_website_opportunity_signal"}},
+    "ben_carter": {"website_opportunity": {"claim": "fact_b", "statement": "Riverbend Landscaping's website is losing customer inquiries because visitors cannot request an estimate online.", "source": "public_website_opportunity_signal"}},
+    "tasha_green": {"website_opportunity": {"claim": "fact_b", "statement": "Cedar Lane Florist's website is losing customer inquiries because wedding visitors cannot view packages or schedule a consultation.", "source": "public_website_opportunity_signal"}},
+    "derek_wu": {"website_opportunity": {"claim": "fact_b", "statement": "Northline Auto Repair's website is losing customer inquiries because mobile visitors cannot request an appointment.", "source": "public_website_opportunity_signal"}}
   }
 }

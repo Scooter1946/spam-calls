@@ -1,8 +1,8 @@
 {
-  "candidate_id": "maya_chen",
+  "candidate_id": "nina_park",
   "claim": "fact_b",
   "value": {
-    "statement": "Northstar Systems has an August 30 API v1 migration deadline."
+    "statement": "Oak & Ember Bakery's website is losing customer inquiries because custom orders require a phone call."
   },
-  "source": "northstar_public_migration_signal"
+  "source": "public_website_opportunity_signal"
 }

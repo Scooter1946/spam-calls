@@ -84,7 +84,15 @@ def parse_transcript(
     ):
         return _FAILED
 
-    parsed = _PHRASE_TO_RESULT.get(normalize_for_match(transcript))
+    normalized_transcript = normalize_for_match(transcript)
+    parsed = _PHRASE_TO_RESULT.get(normalized_transcript)
+    responses = []
+    for line in transcript.splitlines():
+        speaker, separator, response = line.partition(":")
+        if separator and speaker.strip().casefold() != "agent":
+            responses.append(normalize_for_match(response))
+    if parsed is None:
+        parsed = next((_PHRASE_TO_RESULT[item] for item in reversed(responses) if item in _PHRASE_TO_RESULT), None)
     if parsed is None:
         return _FAILED
 

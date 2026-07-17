@@ -57,7 +57,9 @@ def _now_iso() -> str:
 class Config:
     fact_a_capability: str
     fact_b_capability: str
-    expected_fact_b_phrase: str = "August 30 API v1 migration deadline"
+    prospect_capability: str = "find local small businesses that may need a new website"
+    expected_fact_a_phrase: str = "Business research verified"
+    expected_fact_b_phrase: str = "website is losing customer inquiries"
     conformance_command: str = "pytest -q conformance/test_generated_tool.py"
     fixture_url: str = "http://127.0.0.1:8088"
     author_tool_dir: str = "generated_tools"
@@ -150,6 +152,7 @@ class Orchestrator:
         self._author_request: AuthorRequest | None = None
         self._last_diagnosis: Any | None = None
         self._action_counter = 0
+        self._tools: dict[str, dict[str, Any]] = {}
         try:
             self._step_delay_seconds = max(
                 0.0, float(os.environ.get("PITCHLOOP_STEP_DELAY_SECONDS", "0"))
@@ -161,6 +164,7 @@ class Orchestrator:
             State.PLAN: self._plan,
             State.SELECT_CANDIDATE: self._select_candidate,
             State.POLICY_CHECK: self._policy_check,
+            State.EVALUATE_TOOLS: self._evaluate_tools,
             State.DISCOVER_FACT_A: self._discover_fact_a,
             State.PURCHASE_FACT_A: self._purchase_fact_a,
             State.GENERATE_PITCH: self._generate_pitch,
@@ -206,10 +210,49 @@ class Orchestrator:
 
     def _load_spec(self) -> State:
         self.deps.artifacts.write_json("spec.json", self.spec)
+        self.deps.artifacts.write_text(
+            "agent/internal_prompt.txt",
+            "You are SiteSpring's autonomous small-business sales agent.\n"
+            "Work the prospect queue in order and call each person at most once.\n"
+            "Before every action, ask what you need to know and whether a tool would materially help.\n"
+            "Inspect installed tools, search Zero.xyz first, use an affordable match, and if none exists build, test, install, and receipt the smallest safe custom tool.\n"
+            "Research every business before calling. Ground every claim in evidence. After every call, record what went well, what went wrong, and change the next call's strategy.\n"
+            "Never bypass policy, budget, consent, or evidence requirements.\n",
+        )
         return State.PLAN
 
     def _plan(self) -> State:
         plan = build_plan(self.spec)
+        matches = self.deps.zero.search(self.config.prospect_capability)
+        self.deps.artifacts.write_json(
+            "zero/prospect_search.json",
+            {"capability": self.config.prospect_capability, "matches": [m.model_dump() for m in matches]},
+        )
+        self._emit(EventType.ZERO_SEARCH, {"capability": self.config.prospect_capability, "n": len(matches)})
+        if matches:
+            service = select_within_budget(matches, self.budget.remaining())
+            if service is not None:
+                result = self.deps.zero.invoke(service, {"objective": self.spec.objective or self.spec.goal})
+                self.budget.record(result.amount_cents, f"zero:{service.service_id}")
+                discovered = [c for c in result.result.get("candidate_ids", []) if c in self.spec.candidates]
+                if discovered:
+                    plan.ranked_candidates = discovered + [c for c in plan.ranked_candidates if c not in discovered]
+                self.deps.artifacts.write_json(
+                    "zero/prospect_discovery.json",
+                    {"service": service, "result": result.result, "receipt": result.receipt},
+                )
+                self._record_tool(
+                    service.service_id,
+                    name=service.name,
+                    provider="zero.xyz",
+                    capability=self.config.prospect_capability,
+                    status="used",
+                    amount_cents=result.amount_cents,
+                )
+                self._emit(
+                    EventType.PROSPECTS_DISCOVERED,
+                    {"candidate_ids": discovered, "provider_ref": result.provider_ref, "amount_cents": result.amount_cents, "artifact_refs": ["zero/prospect_discovery.json"]},
+                )
         self.state.ranked_candidates = plan.ranked_candidates
         self.deps.artifacts.write_json("plan.json", plan)
         self.deps.registry.reload()
@@ -255,6 +298,27 @@ class Orchestrator:
         if not decision.allowed:
             # Observation-driven: a denial routes back to try the next candidate.
             return State.SELECT_CANDIDATE
+        return State.EVALUATE_TOOLS
+
+    def _evaluate_tools(self) -> State:
+        candidate = self.state.current_candidate
+        assert candidate is not None
+        custom_ready = self.deps.registry.find("fact_b") is not None
+        assessment = {
+            "candidate_id": candidate,
+            "question": "Would a tool materially improve the next action?",
+            "answer": "yes",
+            "needed_research": ["business profile and web presence", "website conversion opportunity"],
+            "installed_custom_capabilities": ["website opportunity audit"] if custom_ready else [],
+            "decision": [
+                "Search Zero.xyz for business research.",
+                "Use the installed website audit tool." if custom_ready else "Search Zero.xyz for a website audit; build the smallest custom tool if no match exists.",
+            ],
+            "next_action": "research the business before calling",
+        }
+        path = f"contacts/{candidate}/tool_assessment.json"
+        self.deps.artifacts.write_json(path, assessment)
+        self._emit(EventType.TOOL_NEED_EVALUATED, {**assessment, "artifact_refs": [path]})
         return State.DISCOVER_FACT_A
 
     def _discover_fact_a(self) -> State:
@@ -271,11 +335,18 @@ class Orchestrator:
         )
         self._emit(EventType.ZERO_SEARCH, {"capability": self.config.fact_a_capability, "n": len(matches)})
         if not matches:
-            return self._fail("no Zero enrichment service found for Fact A")
+            return self._fail("no Zero business-research service found")
         service = select_within_budget(matches, self.budget.remaining())
         if service is None:
-            return self._fail("no affordable Zero service within budget for Fact A")
+            return self._fail("no affordable Zero business-research service within budget")
         self._selected_service = service
+        self._record_tool(
+            service.service_id,
+            name=service.name,
+            provider="zero.xyz",
+            capability=self.config.fact_a_capability,
+            status="discovered",
+        )
         return State.PURCHASE_FACT_A
 
     def _purchase_fact_a(self) -> State:
@@ -289,11 +360,19 @@ class Orchestrator:
             service, {"candidate_id": self.state.current_candidate}
         )
         self.budget.record(result.amount_cents, f"zero:{service.service_id}")
+        self._record_tool(
+            service.service_id,
+            name=service.name,
+            provider="zero.xyz",
+            capability=self.config.fact_a_capability,
+            status="used",
+            amount_cents=result.amount_cents,
+        )
         self.deps.artifacts.write_json("zero/fact_a_receipt.json", result.receipt)
         if self.budget.over_budget():
             return self._fail("budget exceeded after Fact A purchase")
         if not result.ok:
-            return self._fail("Zero invocation for Fact A failed")
+            return self._fail("Zero business research failed")
 
         statement = result.result.get("statement")
         self.state.fact_a = self._publish_evidence(
@@ -350,7 +429,7 @@ class Orchestrator:
             self.call_port = self.deps.build_call_port(
                 zero_port=self.deps.zero,
                 artifacts=self.deps.artifacts,
-                expected_fact_a=self.state.fact_a.value["statement"],
+                expected_fact_a=self.config.expected_fact_a_phrase,
                 expected_fact_b_phrase=self.config.expected_fact_b_phrase,
                 allowed_candidates=self.spec.candidates,
                 max_calls=self.spec.max_paid_calls,
@@ -480,6 +559,13 @@ class Orchestrator:
             "tools/generated_manifest.json",
             {"manifest": request.manifest, "files": result.files, "mode": result.mode},
         )
+        self._record_tool(
+            "custom-website-opportunity-audit",
+            name=request.manifest["name"],
+            provider="custom",
+            capability="website opportunity audit",
+            status="authored",
+        )
         self.deps.artifacts.write_text("tools/author_prompt.txt", result.prompt)
         self._emit(EventType.TOOL_AUTHORED, {"files": result.files, "mode": result.mode})
         return State.TEST_TOOL
@@ -511,8 +597,8 @@ class Orchestrator:
     def _open_pr(self) -> State:
         pr = self.deps.repo.create_agent_pr(
             files=self.state.authored_files,
-            title="agent: add fact_b retrieval tool",
-            body="Auto-authored tool for capability fact_b (PitchLoop self-improvement loop).",
+            title="agent: add website opportunity audit",
+            body="Auto-authored website research capability after Zero.xyz returned no match.",
         )
         self.state.pr = pr
         self.deps.artifacts.write_json("repo/pr.json", pr)
@@ -538,6 +624,13 @@ class Orchestrator:
         self._emit(EventType.TOOL_RELOADED, {"found_fact_b": handle is not None})
         if handle is None:
             return self._fail("fact_b capability not found after reload")
+        self._record_tool(
+            "custom-website-opportunity-audit",
+            name="website_opportunity_audit",
+            provider="custom",
+            capability="website opportunity audit",
+            status="installed",
+        )
         return State.SELECT_CANDIDATE
 
     def _collect_fact_b(self) -> State:
@@ -558,6 +651,13 @@ class Orchestrator:
             candidate_id=candidate,
             provenance=payload.get("provenance", {}),
             event_type=EventType.RECEIPT_RECORDED,
+        )
+        self._record_tool(
+            "custom-website-opportunity-audit",
+            name="website_opportunity_audit",
+            provider="custom",
+            capability="website opportunity audit",
+            status="used",
         )
         return State.GENERATE_PITCH
 
@@ -750,10 +850,37 @@ class Orchestrator:
             canonical_value={
                 "candidate_id": self.state.current_candidate,
                 "claim": "fact_b",
-                "value": {"statement": f"Northstar Systems has an {self.config.expected_fact_b_phrase}."},
-                "source": "northstar_public_migration_signal",
+                "value": {"statement": f"The business's {self.config.expected_fact_b_phrase}."},
+                "source": "public_website_opportunity_signal",
                 "provenance": {"url": self.config.fixture_url},
             },
+        )
+
+    def _record_tool(
+        self,
+        tool_id: str,
+        *,
+        name: str,
+        provider: str,
+        capability: str,
+        status: str,
+        amount_cents: int = 0,
+    ) -> None:
+        current = self._tools.get(tool_id, {})
+        uses = int(current.get("usage_count", 0)) + (1 if status == "used" else 0)
+        self._tools[tool_id] = {
+            "tool_id": tool_id,
+            "name": name,
+            "provider": provider,
+            "capability": capability,
+            "status": status,
+            "usage_count": uses,
+            "spent_cents": int(current.get("spent_cents", 0)) + amount_cents,
+            "last_used_at": _now_iso(),
+        }
+        self.deps.artifacts.write_json(
+            "tools/inventory.json",
+            {"tools": list(self._tools.values())},
         )
 
     def _publish_evidence(

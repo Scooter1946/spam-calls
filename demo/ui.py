@@ -131,6 +131,7 @@ def _build_calls(
     errors: list[str],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     calls: list[dict[str, Any]] = []
+    profiles = spec.get("candidate_profiles", {})
     call_evidence = [item for item in evidence if item.get("kind") == "call"]
     for index, directory in enumerate(_call_dirs(run)):
         call_id = directory.name
@@ -157,6 +158,7 @@ def _build_calls(
                 "id": call_id,
                 "number": index + 1,
                 "candidate_id": candidate or "Unknown",
+                "profile": profiles.get(candidate, {}),
                 "status": summary.get("status", "running"),
                 "code": summary.get("code", ""),
                 "amount_cents": summary.get("amount_cents", 0),
@@ -198,7 +200,7 @@ def _build_calls(
 
     by_candidate = {call["candidate_id"]: call for call in calls}
     contacts: list[dict[str, Any]] = []
-    for candidate in spec.get("candidates", []):
+    for position, candidate in enumerate(spec.get("candidates", []), 1):
         call = by_candidate.get(candidate)
         policy = _read_json(run, f"contacts/{candidate}/policy.json", errors)
         if call:
@@ -209,7 +211,17 @@ def _build_calls(
             status = "queued"
         else:
             status = "remaining"
-        contacts.append({"candidate_id": candidate, "status": status, "call": call, "policy": policy})
+        contacts.append(
+            {
+                "candidate_id": candidate,
+                "profile": profiles.get(candidate, {}),
+                "queue_position": position,
+                "status": status,
+                "call": call,
+                "policy": policy,
+                "tool_assessment": _read_json(run, f"contacts/{candidate}/tool_assessment.json", errors),
+            }
+        )
     return calls, contacts
 
 
@@ -255,6 +267,7 @@ def build_view_model(run_dir: str | Path, selected_call_id: str | None = None) -
     denied = sum(contact["status"] == "denied" for contact in contacts)
     remaining = sum(contact["status"] in {"remaining", "queued"} for contact in contacts)
     tool_manifest = _read_json(run, "tools/generated_manifest.json", errors)
+    tool_inventory = _read_json(run, "tools/inventory.json", errors).get("tools", [])
     tool_actions = [item for item in actions if any(word in str(item.get("action", "")) for word in ("tool", "conformance", "pr_", "merge"))]
     return {
         "run_name": run.name,
@@ -278,6 +291,8 @@ def build_view_model(run_dir: str | Path, selected_call_id: str | None = None) -
         "strategies": strategies,
         "current_strategy": strategies[-1] if strategies else {},
         "tool_manifest": tool_manifest,
+        "zero_tools": [tool for tool in tool_inventory if tool.get("provider") == "zero.xyz"],
+        "custom_tools": [tool for tool in tool_inventory if tool.get("provider") == "custom"],
         "tool_actions": tool_actions,
         "meeting": meeting,
         "failure": failure,

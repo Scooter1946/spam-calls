@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass, is_dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Iterable, Mapping
 
-from callee.call_harness import evaluate_campaign_pitch
+from callee.call_harness import evaluate_campaign_pitch, render_conversation
 from pitch.transcript_parser import parse_transcript
 
 if TYPE_CHECKING:
@@ -310,7 +310,7 @@ class _BaseCallPort:
         self._artifacts = _ArtifactWriter(artifacts)
         self._expected_fact_a = expected_fact_a
         self._expected_fact_b_phrase = expected_fact_b_phrase
-        self._allowed_candidates = set(allowed_candidates or ["maya_chen"])
+        self._allowed_candidates = set(allowed_candidates or ["nina_park"])
         self._max_calls = max_calls
         self._one_call_per_candidate = one_call_per_candidate
         self._called_candidates: set[str] = set()
@@ -400,7 +400,7 @@ class FakeCallPort(_BaseCallPort):
         return self._persist(
             index=index,
             pitch_text=pitch_text,
-            transcript=rubric.response,
+            transcript=render_conversation(candidate_id, pitch_text, rubric),
             receipt=receipt,
             amount_cents=0,
             provider_ref=f"fake-call-{index}",
@@ -409,7 +409,7 @@ class FakeCallPort(_BaseCallPort):
 
 
 class ZeroBackedCallPort(_BaseCallPort):
-    """Live paid adapter built exclusively on P1's injected canonical ZeroPort."""
+    """Live paid adapter that routes every fictional persona to one demo phone."""
 
     def __init__(self, *, zero_port: "ZeroPort", **kwargs: Any) -> None:
         super().__init__(**kwargs)
@@ -531,7 +531,7 @@ def build_call_port(
     if selected_mode == "live":
         if zero_port is None:
             raise ValueError("live call mode requires an injected ZeroPort")
-        # A single configured phone number is never treated as a contact list.
-        live_common = {**common, "allowed_candidates": ["maya_chen"], "max_calls": 1, "one_call_per_candidate": True}
-        return ZeroBackedCallPort(zero_port=zero_port, **live_common)  # type: ignore[return-value]
+        # Candidate ids select fictional personas and evidence only. Every paid
+        # invocation reads the same consented CALLEE_PHONE_E164 demo number.
+        return ZeroBackedCallPort(zero_port=zero_port, **common)  # type: ignore[return-value]
     raise ValueError(f"unsupported CALL_MODE: {selected_mode!r}; expected fake or live")

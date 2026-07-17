@@ -78,15 +78,19 @@ def _campaign_timeline(run_dir: Path, events: list[dict[str, Any]]) -> list[str]
             capability = event.get("capability", "capability")
             count = event.get("n", "?")
             lines.append(f"[ZERO/FAKE] searched {capability}: {count} match(es)")
+        elif event_type == "prospects_discovered":
+            lines.append(f"[QUEUE] Zero.xyz discovered {len(event.get('candidate_ids') or [])} fictional businesses")
+        elif event_type == "tool_need_evaluated":
+            lines.append(f"[TOOLS] {candidate}: assessed research needs before calling")
         elif event_type == "tool_authored":
-            lines.append("[CODE] generated missing capability tool")
+            lines.append("[CODE] generated website opportunity audit")
         elif event_type == "tool_conformance" and event.get("exit_code") == 0:
             lines.append("[CODE] generated tool passed conformance")
         elif event_type == "pr_merged" and event.get("merged") is True:
             lines.append(f"[GITHUB/FAKE] tool PR merged at {event.get('sha', '?')}")
         elif event_type == "tool_reused":
             lines.append(
-                f"[TOOL] reused {event.get('capability', 'capability')} for "
+                f"[TOOL] reused website opportunity audit for "
                 f"{event.get('candidate_id', candidate)}"
             )
         elif event_type == "candidate_completed":
@@ -145,7 +149,7 @@ def timeline(run_dir: Path) -> list[str]:
         ids = diagnosis.get("evidence_ids") or diagnosis.get("ids") or []
         lines.append(f"[EVIDENCE/LOCAL] diagnosis cites {','.join(ids)}")
     if search_b.get("no_match") is True:
-        lines.append("[ZERO/FAKE] no marketplace capability matched fact_b")
+        lines.append("[ZERO/FAKE] no marketplace capability matched website opportunity audit")
     if conformance.get("passed") is True or conformance.get("exit_code") == 0:
         lines.append("[CODE] generated tool; fixed conformance passed")
     merge_result = merge.get("merge", merge)
@@ -166,7 +170,7 @@ def timeline(run_dir: Path) -> list[str]:
             f"[GITHUB/FAKE] PR #{number} merged at {merge_sha}"
         )
     if reload_result.get("found_fact_b") is True:
-        lines.append("[TOOL] fact_b acquired from generated tool")
+        lines.append("[TOOL] website opportunity audit acquired from generated tool")
     if call_2.get("status") == "booked":
         lines.append("[CALL 2] meeting booked")
     return lines

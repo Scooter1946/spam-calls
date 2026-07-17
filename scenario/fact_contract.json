@@ -1,17 +1,4 @@
 {
-  "fact_a": {
-    "claim": "fact_a",
-    "source": "zero_paid_enrichment",
-    "statement": null,
-    "match_mode": "normalized_substring",
-    "locked_at_runtime": true
-  },
-  "fact_b": {
-    "claim": "fact_b",
-    "source": "northstar_public_migration_signal",
-    "statement": "Northstar Systems has an August 30 API v1 migration deadline.",
-    "required_phrase": "August 30 API v1 migration deadline",
-    "match_mode": "normalized_substring",
-    "locked_at_runtime": false
-  }
+  "fact_a": {"claim": "fact_a", "display_name": "Zero.xyz business research", "source": "zero_paid_enrichment", "required_phrase": "Business research verified", "match_mode": "normalized_substring"},
+  "fact_b": {"claim": "fact_b", "display_name": "Custom website opportunity audit", "source": "public_website_opportunity_signal", "required_phrase": "website is losing customer inquiries", "match_mode": "normalized_substring"}
 }

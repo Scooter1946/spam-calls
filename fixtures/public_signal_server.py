@@ -1,4 +1,4 @@
-"""Public fictional company-signal fixture used by generated tools.
+"""Public fictional small-business website fixture used by generated tools.
 
 Run locally with::
 
@@ -24,17 +24,21 @@ def _load_fixture() -> dict[str, Any]:
 
     with _DATA_PATH.open(encoding="utf-8") as handle:
         data = json.load(handle)
-    signal = data.get("northstar_systems", {}).get("migration_signal", {})
-    required = {"allowed_candidates", "claim", "statement", "source", "published_at"}
-    if not required.issubset(signal):
-        missing = sorted(required.difference(signal))
-        raise RuntimeError(f"fixture is missing required fields: {missing}")
+    businesses = data.get("small_businesses")
+    if not isinstance(businesses, dict) or not businesses:
+        raise RuntimeError("fixture is missing small_businesses")
+    required = {"claim", "statement", "source"}
+    for candidate_id, business in businesses.items():
+        signal = business.get("website_opportunity", {}) if isinstance(business, dict) else {}
+        if not required.issubset(signal):
+            missing = sorted(required.difference(signal))
+            raise RuntimeError(f"fixture for {candidate_id!r} is missing required fields: {missing}")
     return data
 
 
 app = FastAPI(
-    title="PitchLoop Public Company Signal Fixture",
-    description="Fictional public-company data; contains no private personal data.",
+    title="PitchLoop Website Opportunity Fixture",
+    description="Fictional public small-business website data; contains no private personal data.",
     version="1.0.0",
 )
 
@@ -45,18 +49,20 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/companies/northstar_systems/migration-signal")
-def migration_signal(
+@app.get("/businesses/website-opportunity")
+def website_opportunity(
     candidate_id: str = Query(..., min_length=1),
 ) -> dict[str, str]:
-    signal = _load_fixture()["northstar_systems"]["migration_signal"]
-    if candidate_id not in signal["allowed_candidates"]:
-        raise HTTPException(status_code=404, detail="migration signal not found")
+    signal = (
+        _load_fixture()["small_businesses"]
+        .get(candidate_id, {})
+        .get("website_opportunity")
+    )
+    if not signal:
+        raise HTTPException(status_code=404, detail="website opportunity not found")
     return {
         "candidate_id": candidate_id,
-        "company_id": "northstar_systems",
         "claim": signal["claim"],
         "statement": signal["statement"],
         "source": signal["source"],
-        "published_at": signal["published_at"],
     }

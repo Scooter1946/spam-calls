@@ -1,24 +1,22 @@
-# PitchLoop deterministic callee script
+# PitchLoop consented teammate call script
 
-This script is for the consenting teammate answering both demo calls as Maya Chen, a fictional VP Engineering at Northstar Systems.
+Every live Zero.xyz call in this demo goes to the one consenting teammate number supplied through `CALLEE_PHONE_E164`. The queue contains fictional owners and businesses; it is not a phone list.
 
 ## Setup
 
-- Use only a phone number owned by the consenting teammate and provided through `CALLEE_PHONE_E164`.
-- Take the call in a quiet room and confirm before the demo whether recording is enabled.
-- Do not say a real employer, customer, phone number, or other personal information on the call.
-- Keep each call to 20–30 seconds. End the call after the one applicable response below.
+- Confirm the teammate owns the configured number and consents to each call and any transcript capture.
+- Use the dashboard's current queue card to play that fictional owner.
+- Never say a real employer, customer, phone number, or personal detail.
+- Allow a brief, natural back-and-forth. Pauses, “um,” “yeah,” and clarification questions are encouraged.
+- End with the exact outcome sentence shown for the current objection so the deterministic parser can receipt it.
 
-## Call #1 response
+## Queue outcomes
 
-> That first point is relevant, but you have not shown that you understand our August 30 API v1 migration deadline. I am not taking the meeting.
+1. Nina / missing website audit: “Mm, okay, but you haven't actually looked at our website, have you? I think I'm going to pass for now.”
+2. Samir / unclear outcome: “I hear you, but I'm still not sure what that changes for the business. Let me think about it and, uh, don't book anything yet.”
+3. Carla / wants proof: “Maybe, but can you show me something you've actually done for a business like ours? Without that, I'm not ready to take a meeting.”
+4. Ben / too much work: “Oof, that sounds like a whole project, and we're already stretched thin. I can't take that on right now.”
+5. Tasha / timing: “Yeah, the idea makes sense, but the timing is rough. I can't justify a big website project this month.”
+6. Derek / meeting: “Yeah, okay, that actually sounds useful. Send me a 20-minute invite for Tuesday at 2 PM.”
 
-## Call #2 response
-
-> Yes, that is relevant to what we are doing. Send me a 20-minute invite for Tuesday at 2 PM.
-
-## Mandatory behavior
-
-Do not improvise, explain, repeat the pitch, answer follow-up questions, or coach the agent. Say only the fixed response appropriate to the pitch. The fictional identity is a deterministic external test oracle, not a live sales prospect.
-
-If call recording or transcript capture is enabled, get the teammate's explicit consent before dialing. Store only the redacted provider reference, receipt, and scripted transcript in demo artifacts; do not commit phone numbers, raw audio, tokens, or wallet credentials.
+All artifacts must keep the number redacted. Do not commit raw audio, credentials, tokens, or wallet details.

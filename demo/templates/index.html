@@ -19,14 +19,14 @@
         </div>
         <div class="goal-copy">
           <p class="section-code">New campaign</p>
-          <h2>What should your agent accomplish?</h2>
-          <p>Give it a concrete outcome. It will call eligible people once, learn from every conversation, and build missing tools when needed.</p>
+          <h2>Put local growth on autopilot.</h2>
+          <p>SiteSpring finds and researches small businesses, calls each eligible owner once, learns from every conversation, and grows its own research toolset.</p>
         </div>
         <form class="goal-form" method="post" action="/runs">
           <label for="objective">Campaign objective</label>
-          <textarea id="objective" name="objective" maxlength="2000" required autofocus>Book one qualified meeting with an engineering leader who needs help shipping an API migration safely.</textarea>
+          <textarea id="objective" name="objective" maxlength="2000" required autofocus>Find and research local small businesses that need a better website, learn from each owner conversation, and book one qualified website consultation.</textarea>
           <div class="goal-form-footer">
-            <span>Fake/local demo · no real people are contacted</span>
+            <span>Demo boundary · live Zero calls route only to one consented teammate</span>
             <button type="submit">Launch campaign <span aria-hidden="true">→</span></button>
           </div>
         </form>
@@ -40,10 +40,10 @@
       <aside class="goal-aside" aria-label="Campaign loop">
         <p class="section-code">How the loop learns</p>
         <ol>
-          <li><span>01</span><div><strong>Choose a new person</strong><small>Policy-gated and never called twice</small></div></li>
-          <li><span>02</span><div><strong>Call with evidence</strong><small>Every provider action leaves a receipt</small></div></li>
+          <li><span>01</span><div><strong>Discover businesses</strong><small>Zero.xyz builds an ordered prospect queue</small></div></li>
+          <li><span>02</span><div><strong>Research, then call</strong><small>Each business is investigated before one call</small></div></li>
           <li><span>03</span><div><strong>Reflect on the result</strong><small>What worked, failed, and changes next</small></div></li>
-          <li><span>04</span><div><strong>Grow the toolset</strong><small>Search Zero, then build and verify gaps</small></div></li>
+          <li><span>04</span><div><strong>Grow the toolset</strong><small>Search Zero first, then build and verify gaps</small></div></li>
         </ol>
       </aside>
     </main>
@@ -80,6 +80,11 @@
         </div>
       </section>
 
+      <aside class="demo-boundary">
+        <strong>Consented demo calling</strong>
+        <span>Every live Zero.xyz call is routed to one teammate-controlled demo number. The fictional queue drives research, personalization, receipts, and learning—never calls to real business owners.</span>
+      </aside>
+
       <section class="stat-grid" aria-label="Campaign statistics">
         <article><span>Calls placed</span><strong>{{ model.stats.calls }}</strong><small>{{ model.stats.remaining }} people remaining</small></article>
         <article><span>Successful meetings / sales</span><strong>{{ model.stats.booked }}</strong><small>{% if model.meeting %}Meeting receipt captured{% else %}No booked outcome yet{% endif %}</small></article>
@@ -89,9 +94,14 @@
 
       {% if model.selected_call %}
         {% set call = model.selected_call %}
+        {% set profile = call.profile|default({}) %}
         <section class="call-detail" aria-labelledby="call-detail-title">
           <div class="section-heading section-heading--compact">
-            <div><p class="section-code">Call {{ '%02d'|format(call.number) }} / complete record</p><h2 id="call-detail-title">{{ call.candidate_id|replace('_', ' ') }}</h2></div>
+            <div>
+              <p class="section-code">Call {{ '%02d'|format(call.number) }} / complete record</p>
+              <h2 id="call-detail-title">{{ profile.name|default(call.candidate_id|replace('_', ' '), true) }}</h2>
+              <p class="detail-identity">{{ profile.business|default('Business profile pending', true) }} · {{ profile.title|default('Contact', true) }} · {{ profile.location|default('Location pending', true) }}</p>
+            </div>
             <div class="detail-nav"><span class="status-pill status-pill--{{ call.status }}">{{ call.status }}</span><a href="/runs/{{ model.run_name }}">Close detail ×</a></div>
           </div>
 
@@ -137,18 +147,50 @@
         </section>
       {% endif %}
 
+      <section class="queue-section" aria-labelledby="queue-title">
+        <div class="section-heading section-heading--compact">
+          <div><p class="section-code">Sequential campaign</p><h2 id="queue-title">Prospect queue</h2></div>
+          <span class="event-count">One researched call at a time</span>
+        </div>
+        <ol class="prospect-queue">
+          {% for contact in model.contacts %}
+            {% set profile = contact.profile %}
+            {% if contact.status == 'denied' %}{% set queue_state = 'denied' %}{% set queue_label = 'Denied' %}
+            {% elif contact.call %}{% set queue_state = 'called' %}{% set queue_label = 'Called' %}
+            {% elif contact.status in ['calling', 'in_progress'] %}{% set queue_state = 'current' %}{% set queue_label = 'Current' %}
+            {% else %}{% set queue_state = 'waiting' %}{% set queue_label = 'Waiting' %}{% endif %}
+            <li class="queue-card queue-card--{{ queue_state }}">
+              <span class="queue-position">{{ '%02d'|format(contact.queue_position) }}</span>
+              <div class="queue-person">
+                <strong>{{ profile.name|default(contact.candidate_id|replace('_', ' '), true) }}</strong>
+                <span>{{ profile.business|default('Business pending', true) }}</span>
+                <small>{{ profile.title|default('Contact', true) }} · {{ profile.location|default('Location pending', true) }}</small>
+              </div>
+              <div class="queue-state">
+                <span class="queue-state-label">{{ queue_label }}</span>
+                {% if contact.call %}<small>{{ contact.call.code|replace('_', ' ') }}</small>
+                {% elif contact.tool_assessment %}<small>Tools assessed</small>
+                {% elif contact.status == 'denied' %}<small>Policy blocked</small>
+                {% else %}<small>Awaiting research</small>{% endif %}
+              </div>
+            </li>
+          {% else %}<li class="empty-row">Zero.xyz is discovering businesses…</li>{% endfor %}
+        </ol>
+      </section>
+
       <div class="dashboard-grid">
         <section class="calls-section">
           <div class="section-heading section-heading--compact">
-            <div><p class="section-code">People and calls</p><h2>Campaign queue</h2></div>
+            <div><p class="section-code">Conversation records</p><h2>Calls &amp; outcomes</h2></div>
             <span class="event-count">{{ model.contacts|length }} people</span>
           </div>
           <table class="calls-table">
-            <thead><tr><th>Person</th><th>Policy / call</th><th>Outcome</th><th>Learning</th><th></th></tr></thead>
+            <thead><tr><th>Person / business</th><th>Policy / call</th><th>Outcome</th><th>Learning</th><th></th></tr></thead>
             <tbody>
               {% for contact in model.contacts %}
+                {% set profile = contact.profile %}
                 <tr>
-                  <td><strong>{{ contact.candidate_id|replace('_', ' ') }}</strong><small>{{ 'Call %02d'|format(contact.call.number) if contact.call else 'Not called' }}</small></td>
+                  <td><strong>{{ profile.name|default(contact.candidate_id|replace('_', ' '), true) }}</strong><span>{{ profile.business|default('Business pending', true) }}</span><small>{{ profile.title|default('Contact', true) }} · {{ profile.location|default('Location pending', true) }} · {{ 'Call %02d'|format(contact.call.number) if contact.call else 'Not called' }}</small></td>
                   <td><span class="status-pill status-pill--{{ contact.status }}">{{ contact.status|replace('_', ' ') }}</span></td>
                   <td>{{ contact.call.code|replace('_', ' ') if contact.call else ('Policy blocked' if contact.status == 'denied' else 'Waiting') }}</td>
                   <td>{% if contact.call and contact.call.reflection %}Strategy v{{ contact.call.reflection.strategy_version_after }}{% elif contact.call %}Reflecting…{% else %}—{% endif %}</td>
@@ -174,14 +216,37 @@
           <div class="section-heading section-heading--compact"><div><p class="section-code">Cross-person learning</p><h2>Learning timeline</h2></div></div>
           <ol class="learning-timeline">
             {% for reflection in model.reflections %}
-              <li><span>{{ '%02d'|format(reflection.call_number) }}</span><div><strong>{{ reflection.candidate_id|replace('_', ' ') }} · {{ reflection.call_code|replace('_', ' ') }}</strong><p>{{ reflection.learned|join(' ') }}</p><small>Strategy v{{ reflection.strategy_version_before }} → v{{ reflection.strategy_version_after }}{% if reflection.missing_capability %} · needed {{ reflection.missing_capability }}{% endif %}</small></div></li>
+              {% set profile = model.spec.get('candidate_profiles', {}).get(reflection.candidate_id, {}) %}
+              <li><span>{{ '%02d'|format(reflection.call_number) }}</span><div><strong>{{ profile.name|default(reflection.candidate_id|replace('_', ' '), true) }} · {{ profile.business|default('Business', true) }}</strong><p>{{ reflection.learned|join(' ') }}</p><small>{{ reflection.call_code|replace('_', ' ') }} · Strategy v{{ reflection.strategy_version_before }} → v{{ reflection.strategy_version_after }}{% if reflection.missing_capability %} · needed {{ reflection.missing_capability }}{% endif %}</small></div></li>
             {% else %}<li class="empty-row">Learning appears after the first completed call.</li>{% endfor %}
           </ol>
         </section>
 
         <section class="tools-section">
-          <div class="section-heading section-heading--compact"><div><p class="section-code">Self-improvement</p><h2>Tool history</h2></div></div>
-          {% if model.tool_manifest %}<div class="installed-tool"><span>Installed tool</span><strong>{{ model.tool_manifest.manifest.name|default('Generated capability') }}</strong><small>{{ model.tool_manifest.manifest.capability|default('fact_b') }} · {{ model.tool_manifest.mode|default('local') }}</small></div>{% endif %}
+          <div class="section-heading section-heading--compact"><div><p class="section-code">Growing capabilities</p><h2>Agent toolset</h2></div></div>
+          <div class="toolset-columns">
+            <section class="tool-group tool-group--zero">
+              <div class="tool-group-heading"><span>Zero.xyz Marketplace</span><strong>{{ model.zero_tools|length }}</strong></div>
+              {% for tool in model.zero_tools %}
+                <article class="tool-card">
+                  <div><strong>{{ tool.name|default(tool.tool_id, true) }}</strong><span class="status-pill status-pill--{{ tool.status|default('queued') }}">{{ tool.status|default('discovered') }}</span></div>
+                  <p>{{ tool.capability|default('Capability pending') }}</p>
+                  <small>{{ tool.usage_count|default(0) }} uses · ${{ '%.2f'|format(tool.spent_cents|default(0) / 100) }} spent</small>
+                </article>
+              {% else %}<p class="tool-empty">Marketplace search has not completed.</p>{% endfor %}
+            </section>
+            <section class="tool-group tool-group--custom">
+              <div class="tool-group-heading"><span>Custom Built</span><strong>{{ model.custom_tools|length }}</strong></div>
+              {% for tool in model.custom_tools %}
+                <article class="tool-card">
+                  <div><strong>{{ tool.name|default(tool.tool_id, true) }}</strong><span class="status-pill status-pill--{{ tool.status|default('queued') }}">{{ tool.status|default('built') }}</span></div>
+                  <p>{{ tool.capability|default('Capability pending') }}</p>
+                  <small>{{ tool.usage_count|default(0) }} uses · verified agent-authored tool</small>
+                </article>
+              {% else %}<p class="tool-empty">No custom gap has required a build yet.</p>{% endfor %}
+            </section>
+          </div>
+          <div class="tool-history-label">Tool acquisition history</div>
           <ol class="compact-actions">
             {% for action in model.tool_actions %}<li><span class="action-dot"></span><div><strong>{{ action.action|replace('_', ' ') }}</strong><small>{{ action.status }} · {{ action.occurred_at|default('') }}</small></div></li>{% else %}<li class="empty-row">No tool changes yet. Existing tools are reused first.</li>{% endfor %}
           </ol>

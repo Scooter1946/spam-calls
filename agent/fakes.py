@@ -37,21 +37,21 @@ from agent.tool_author import (
     ToolAuthor,
     build_prompt,
 )
-from callee.call_harness import evaluate_campaign_pitch
+from callee.call_harness import evaluate_campaign_pitch, render_conversation
 
-# Fixed spoken callee responses (global context §2).
-CALL1_RESPONSE = (
-    "That first point is relevant, but you have not shown that you understand our "
-    "August 30 API v1 migration deadline. I am not taking the meeting."
-)
-CALL2_RESPONSE = (
-    "Yes, that is relevant to what we are doing. Send me a 20-minute invite for "
-    "Tuesday at 2 PM."
-)
+FACT_A_STATEMENT = "Business research verified: this is an active local service business with an existing website."
+FACT_B_STATEMENT = "The business's website is losing customer inquiries."
+FACT_B_PHRASE = "website is losing customer inquiries"
 
-FACT_A_STATEMENT = "Northstar Systems recently posted 12 senior backend engineering roles."
-FACT_B_STATEMENT = "Northstar Systems has an August 30 API v1 migration deadline."
-FACT_B_PHRASE = "August 30 API v1 migration deadline"
+BUSINESS_RESEARCH = {
+    "alex_rivera": "Business research verified: Willow & Co Bakery serves walk-in and custom-order customers in Portland.",
+    "nina_park": "Business research verified: Oak & Ember Bakery takes custom cake requests by phone in Tacoma.",
+    "samir_patel": "Business research verified: Harbor Light Plumbing offers emergency residential service in Everett.",
+    "carla_mendez": "Business research verified: Mendez Family Dental welcomes new families in Renton.",
+    "ben_carter": "Business research verified: Riverbend Landscaping sells recurring yard care in Vancouver.",
+    "tasha_green": "Business research verified: Cedar Lane Florist handles weddings and same-day bouquets in Bellevue.",
+    "derek_wu": "Business research verified: Northline Auto Repair serves commuters and fleet customers in Shoreline.",
+}
 
 
 def _now() -> datetime:
@@ -112,34 +112,55 @@ class FakeZeroPort:
     def search(self, capability: str) -> list[ServiceMatch]:
         self.searches.append(capability)
         if capability == self.fact_b_capability:
-            return []  # no service exists for the planted Fact B signal
+            return []  # the agent must build the missing website-audit capability
+        if "find local small businesses" in capability.lower():
+            return [
+                ServiceMatch(
+                    service_id="zero-local-business-finder",
+                    name="Local Business Finder",
+                    description="discovers local small businesses and owner contacts",
+                    price_cents=0,
+                    metadata={"provider": "zero.xyz", "category": "prospecting"},
+                )
+            ]
         if capability == self.fact_a_capability or "enrichment" in capability.lower():
             return [
                 ServiceMatch(
-                    service_id="fake-enrich-001",
-                    name="Acme Company Enrichment",
-                    description="company enrichment for sales personalization",
+                    service_id="zero-business-profile",
+                    name="Business Profile Research",
+                    description="researches a local business, services, and current web presence",
                     price_cents=self.price_cents,
-                    metadata={"provider": "fake"},
+                    metadata={"provider": "zero.xyz", "category": "research"},
                 )
             ]
         return []
 
     def invoke(self, service: ServiceMatch, payload: dict[str, Any]) -> PaidResult:
         candidate_id = str(payload.get("candidate_id") or "unknown")
-        result = {
-            "candidate_id": candidate_id,
-            "claim": "fact_a",
-            "statement": FACT_A_STATEMENT,
-            "source": service.service_id,
-        }
-        amount = service.price_cents or self.price_cents
+        if service.service_id == "zero-local-business-finder":
+            result = {
+                "candidate_ids": list(BUSINESS_RESEARCH),
+                "businesses_found": len(BUSINESS_RESEARCH),
+                "source": service.service_id,
+            }
+        else:
+            result = {
+                "candidate_id": candidate_id,
+                "claim": "fact_a",
+                "statement": BUSINESS_RESEARCH.get(candidate_id, FACT_A_STATEMENT),
+                "source": service.service_id,
+            }
+        amount = service.price_cents if service.price_cents is not None else self.price_cents
         receipt = {
-            "receipt_id": f"fake-receipt-{service.service_id}",
+            "receipt_id": f"fake-receipt-{service.service_id}-{candidate_id}",
             "service_id": service.service_id,
             "amount_cents": amount,
         }
-        raw_path = f"zero/contacts/{candidate_id}/fact_a_result.json"
+        raw_path = (
+            "zero/prospect_discovery_result.json"
+            if service.service_id == "zero-local-business-finder"
+            else f"zero/contacts/{candidate_id}/fact_a_result.json"
+        )
         if self.artifacts is not None:
             self.artifacts.write_json(raw_path, {"result": result, "receipt": receipt})
             raw_path = str(self.artifacts.path_for(raw_path))
@@ -234,7 +255,7 @@ class FakeCallPort:
         self.expected_fact_b_phrase = expected_fact_b_phrase
         self.artifacts = artifacts
         self.price_cents = price_cents
-        self.allowed_candidates = set(allowed_candidates or ["maya_chen"])
+        self.allowed_candidates = set(allowed_candidates or ["nina_park"])
         self.max_calls = max_calls
         self.one_call_per_candidate = one_call_per_candidate
         self.called_candidates: set[str] = set()
@@ -262,10 +283,7 @@ class FakeCallPort:
             rubric.response,
         )
 
-        transcript = (
-            f"AGENT: {pitch_text}\n"
-            f"{candidate_id.upper()}: {response}\n"
-        )
+        transcript = render_conversation(candidate_id, pitch_text, rubric)
         transcript_path = f"calls/call_{self._placed}_transcript.txt"
         if self.artifacts is not None:
             self.artifacts.write_text(transcript_path, transcript)
@@ -383,15 +401,15 @@ class FakeAuthor:
         tool_dir.mkdir(parents=True, exist_ok=True)
         # run() returns a statement WITHOUT the Fact B phrase -> conformance fails.
         module_src = (
-            '"""Broken generated Fact B tool (missing the deadline detail)."""\n\n'
+            '"""Broken generated website audit (missing the inquiry-loss finding)."""\n\n'
             "def run(candidate_id: str) -> dict:\n"
-            "    if candidate_id != 'maya_chen':\n"
+            "    if candidate_id != 'nina_park':\n"
             "        return {}\n"
             "    return {\n"
             "        'candidate_id': candidate_id,\n"
             "        'claim': 'fact_b',\n"
-            "        'value': {'statement': 'Northstar Systems is planning a migration.'},\n"
-            "        'source': 'northstar_public_migration_signal',\n"
+            "        'value': {'statement': 'Oak & Ember Bakery has a website.'},\n"
+            "        'source': 'public_website_opportunity_signal',\n"
             "    }\n"
         )
         import json as _json
@@ -401,7 +419,7 @@ class FakeAuthor:
             _json.dumps(request.manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         (tool_dir / TOOL_TEST_FILE).write_text(
-            "from fact_b_tool import run\n\n\ndef test_placeholder():\n    assert run('maya_chen')\n",
+            "from fact_b_tool import run\n\n\ndef test_placeholder():\n    assert run('nina_park')\n",
             encoding="utf-8",
         )
         return [
@@ -428,7 +446,8 @@ def fake_render_pitch(
     callee rubric can detect their presence.
     """
 
-    lines = [f"Hello, I'm reaching out about {spec.product} for {candidate_id}."]
+    first_name = candidate_id.split("_", 1)[0].title()
+    lines = [f"Hi {first_name}, this is Jamie with {spec.product}. I'll be brief."]
     for ev in evidence:
         if (
             ev.candidate_id == candidate_id
@@ -437,10 +456,15 @@ def fake_render_pitch(
         ):
             statement = ev.value.get("statement")
             if statement:
-                lines.append(f"- {statement}")
+                lines.append(statement)
     lines.extend(strategy_tactics or [])
-    lines.append("Could we book 20 minutes this week?")
-    return "\n".join(lines)
+    lines.extend(
+        [
+            "We build practical websites for small businesses, focused on turning local visitors into calls and bookings.",
+            "Would it be unreasonable to look at the research together for 20 minutes Tuesday?",
+        ]
+    )
+    return " ".join(lines)
 
 
 def fake_conformance(tool_dir: str) -> ConformanceResult:
@@ -463,7 +487,7 @@ def fake_conformance(tool_dir: str) -> ConformanceResult:
     try:
         spec.loader.exec_module(module)
         run = getattr(module, "run")
-        known = run("maya_chen")
+        known = run("nina_park")
         unknown = run("nobody")
     except Exception as exc:  # noqa: BLE001
         return ConformanceResult(exit_code=1, output=f"error executing tool: {exc!r}", command="fake")
